@@ -21,14 +21,11 @@ struct DbEntry {
 }
 
 #[get("/<dbkey>")]
-fn get(dbkey: String, map: State<'_, DbMap>) -> String {
+fn get(dbkey: String, map: State<'_, DbMap>) -> Option<String> {
     let hashmap = map.lock().unwrap();
     match hashmap.get(&dbkey) {
-        Some(val) => json!({"result": val}).to_string(),
-        _ => json!({"error": {
-            "code": -1,
-            "message": "key not found"
-            }}).to_string()
+        Some(val) => Some(json!({"result": val}).to_string()),
+        _ => None
     }
 }
 
