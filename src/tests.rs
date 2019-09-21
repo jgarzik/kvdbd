@@ -7,7 +7,7 @@ fn bad_get_put() {
     let client = Client::new(rocket()).unwrap();
 
     // Try to get a message with an ID that doesn't exist.
-    let mut res = client.get("/message/99").header(ContentType::JSON).dispatch();
+    let mut res = client.get("/1/db/99").header(ContentType::JSON).dispatch();
     assert_eq!(res.status(), Status::NotFound);
 
     let body = res.body_string().unwrap();
@@ -37,36 +37,26 @@ fn bad_get_put() {
 fn post_get_put_get() {
     let client = Client::new(rocket()).unwrap();
 
-    // Check that a message with ID 1 doesn't exist.
-    let res = client.get("/message/1").header(ContentType::JSON).dispatch();
-    assert_eq!(res.status(), Status::NotFound);
+    // Check that a record with key 1 doesn't exist.
+    let mut res = client.get("/1/db/1").header(ContentType::JSON).dispatch();
+    assert_eq!(res.status(), Status::Ok);
+    let body = res.body().unwrap().into_string().unwrap();
+    let jv: serde_json::Value = serde_json::from_str(&body).unwrap();
+    assert_eq!(jv["error"]["code"], -1);
+    assert_eq!(jv["error"]["message"], "key not found");
 
     // Add a new message with ID 1.
-    let res = client.post("/message/1")
+    let res = client.put("/1/db/1/helloworld")
         .header(ContentType::JSON)
-        .body(r#"{ "contents": "Hello, world!" }"#)
         .dispatch();
 
     assert_eq!(res.status(), Status::Ok);
 
-    // Check that the message exists with the correct contents.
-    let mut res = client.get("/message/1").header(ContentType::JSON).dispatch();
+    // Check that the record exists with the correct contents.
+    let mut res = client.get("/1/db/1").header(ContentType::JSON).dispatch();
     assert_eq!(res.status(), Status::Ok);
     let body = res.body().unwrap().into_string().unwrap();
-    assert!(body.contains("Hello, world!"));
+    let jv: serde_json::Value = serde_json::from_str(&body).unwrap();
+    assert_eq!(jv["result"], "helloworld");
 
-    // Change the message contents.
-    let res = client.put("/message/1")
-        .header(ContentType::JSON)
-        .body(r#"{ "contents": "Bye bye, world!" }"#)
-        .dispatch();
-
-    assert_eq!(res.status(), Status::Ok);
-
-    // Check that the message exists with the updated contents.
-    let mut res = client.get("/message/1").header(ContentType::JSON).dispatch();
-    assert_eq!(res.status(), Status::Ok);
-    let body = res.body().unwrap().into_string().unwrap();
-    assert!(!body.contains("Hello, world!"));
-    assert!(body.contains("Bye bye, world!"));
 }
