@@ -4,7 +4,6 @@
 
 use std::{env, io};
 
-use actix_session::{CookieSession, Session};
 use actix_web::http::{StatusCode};
 use actix_web::{
     guard, middleware, web, App, HttpRequest, HttpResponse, HttpServer,
@@ -25,18 +24,8 @@ struct DbEntry {
 
 /// simple index handler
 #[get("/")]
-fn index(state: DbMap, session: Session, req: HttpRequest) -> Result<HttpResponse> {
+fn index(state: DbMap, req: HttpRequest) -> Result<HttpResponse> {
     println!("{:?}", req);
-
-    // session
-    let mut counter = 1;
-    if let Some(count) = session.get::<i32>("counter")? {
-        println!("SESSION value: {}", count);
-        counter = count + 1;
-    }
-
-    // set counter to session
-    session.set("counter", counter)?;
 
     // response
     Ok(HttpResponse::build(StatusCode::OK)
@@ -47,18 +36,8 @@ fn index(state: DbMap, session: Session, req: HttpRequest) -> Result<HttpRespons
 }
 
 /// GET data item
-fn get(state: DbMap, session: Session, req: HttpRequest, path: web::Path<(String,)>) -> Result<HttpResponse> {
+fn get(state: DbMap, req: HttpRequest, path: web::Path<(String,)>) -> Result<HttpResponse> {
     println!("{:?}", req);
-
-    // session
-    let mut counter = 1;
-    if let Some(count) = session.get::<i32>("counter")? {
-        println!("SESSION value: {}", count);
-        counter = count + 1;
-    }
-
-    // set counter to session
-    session.set("counter", counter)?;
 
     let hashmap = state.lock().unwrap();
     match hashmap.get(&path.0) {
@@ -75,18 +54,8 @@ fn get(state: DbMap, session: Session, req: HttpRequest, path: web::Path<(String
 }
 
 /// PUT data item
-fn put(state: DbMap, session: Session, req: HttpRequest, path: web::Path<(String,String)>) -> Result<HttpResponse> {
+fn put(state: DbMap, req: HttpRequest, path: web::Path<(String,String)>) -> Result<HttpResponse> {
     println!("{:?}", req);
-
-    // session
-    let mut counter = 1;
-    if let Some(count) = session.get::<i32>("counter")? {
-        println!("SESSION value: {}", count);
-        counter = count + 1;
-    }
-
-    // set counter to session
-    session.set("counter", counter)?;
 
     let mut hashmap = state.lock().unwrap();
     hashmap.insert(path.0.clone(), path.1.clone());
@@ -117,8 +86,6 @@ fn main() -> io::Result<()> {
     HttpServer::new(move || {
         App::new()
             .register_data(hmm.clone())
-            // cookie session middleware
-            .wrap(CookieSession::signed(&[0; 32]).secure(false))
             // enable logger - always register actix-web Logger middleware last
             .wrap(middleware::Logger::default())
             // register simple routes, handle all methods
