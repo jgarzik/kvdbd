@@ -1,6 +1,5 @@
 
 #[macro_use] extern crate actix_web;
-#[macro_use] extern crate serde_derive;
 
 use std::{env, io};
 
@@ -10,82 +9,86 @@ use actix_web::{
     Result,
 };
 use serde_json::json;
+use sled::{Db,ConfigBuilder};
 
-use std::sync::Mutex;
-use std::collections::HashMap;
+struct ServerState {
+    db: Db
+}
 
-type DbMap = web::Data<Mutex<HashMap<String, String>>>;
+fn err_not_found() -> Result<HttpResponse> {
+    Ok(HttpResponse::build(StatusCode::NOT_FOUND)
+        .content_type("application/json")
+        .body(json!({
+          "error": {
+             "code" : -404,
+              "message": "not found"}}).to_string()))
+}
 
-#[derive(Serialize, Deserialize)]
-struct DbEntry {
-    key: String,
-    val: String
+fn err_500() -> Result<HttpResponse> {
+    Ok(HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR)
+        .content_type("application/json")
+        .body(json!({
+          "error": {
+             "code" : -500,
+              "message": "internal server error"}}).to_string()))
+}
+
+fn ok_json(jval: serde_json::Value) -> Result<HttpResponse> {
+    Ok(HttpResponse::build(StatusCode::OK)
+        .content_type("application/json")
+        .body(jval.to_string()))
 }
 
 /// simple index handler
 #[get("/")]
-fn index(state: DbMap, req: HttpRequest) -> Result<HttpResponse> {
+fn index(state: web::Data<ServerState>, req: HttpRequest) -> Result<HttpResponse> {
     println!("{:?}", req);
 
-    // response
-    Ok(HttpResponse::build(StatusCode::OK)
-        .content_type("application/json")
-        .body(json!({
+    ok_json(json!({
             "name": "kvapp",
-            "version": "0.1.0"}).to_string()))
+            "version": "0.1.0"}))
 }
 
 /// GET data item
-fn get(state: DbMap, req: HttpRequest, path: web::Path<(String,)>) -> Result<HttpResponse> {
+fn get(state: web::Data<ServerState>, req: HttpRequest, path: web::Path<(String,)>) -> Result<HttpResponse> {
     println!("{:?}", req);
 
-    let hashmap = state.lock().unwrap();
-    match hashmap.get(&path.0) {
-        Some(val) => Ok(HttpResponse::build(StatusCode::OK)
-                .content_type("application/json")
-                .body(json!({"result": val}).to_string())),
-        _ => Ok(HttpResponse::build(StatusCode::NOT_FOUND)
-            .content_type("application/json")
-            .body(json!({
-              "error": {
-                 "code" : -404,
-                  "message": "not found"}}).to_string()))
+    match state.db.get(path.0.clone()) {
+        Ok(optval) => match optval {
+            Some(val) => ok_json(json!({"result": String::from_utf8(val.to_vec()).unwrap()})),
+            None => err_not_found()
+        },
+        Err(_e) => err_500()
     }
 }
 
 /// PUT data item
-fn put(state: DbMap, req: HttpRequest, path: web::Path<(String,String)>) -> Result<HttpResponse> {
+fn put(state: web::Data<ServerState>, req: HttpRequest, path: web::Path<(String,String)>) -> Result<HttpResponse> {
     println!("{:?}", req);
 
-    let mut hashmap = state.lock().unwrap();
-    hashmap.insert(path.0.clone(), path.1.clone());
-
-    let bodystr = json!({"result": true}).to_string();
-
-    Ok(HttpResponse::build(StatusCode::OK)
-        .content_type("application/json")
-        .body(bodystr))
+    match state.db.insert(path.0.as_str(), path.1.as_str()) {
+        Ok(_optval) => ok_json(json!({"result": true})),
+        Err(_e) => err_500()
+    }
 }
 
 /// 404 handler
 fn p404() -> Result<HttpResponse> {
-    Ok(HttpResponse::build(StatusCode::NOT_FOUND)
-        .content_type("application/json")
-        .body(json!({
-            "error": {
-                "code" : -404,
-                 "message": "not found"}}).to_string()))
+    err_not_found()
 }
 
 fn main() -> io::Result<()> {
     env::set_var("RUST_LOG", "actix_web=debug");
     env_logger::init();
     let sys = actix_rt::System::new("kvapp");
-    let hmm = web::Data::new(Mutex::new(HashMap::<String, String>::new()));
+
+    let db_config = ConfigBuilder::default()
+        .use_compression(false);
+    let db = Db::start(db_config.build()).unwrap();
 
     HttpServer::new(move || {
         App::new()
-            .register_data(hmm.clone())
+            .data(ServerState { db: db.clone() })
             // enable logger - always register actix-web Logger middleware last
             .wrap(middleware::Logger::default())
             // register simple routes, handle all methods
