@@ -4,8 +4,10 @@ extern crate clap;
 
 const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 const DEF_DB_DIR: &'static str = "db.kv";
+const DEF_BIND_ADDR: &'static str = "127.0.0.1";
+const DEF_BIND_PORT: &'static str = "8080";
 
-use std::{env, io};
+use std::{env, io, fmt};
 
 use actix_web::http::{StatusCode};
 use actix_web::{
@@ -98,10 +100,25 @@ fn main() -> io::Result<()> {
                            .value_name("DIR")
                            .help("Sets a custom database directory (default: db.kv)")  // best way to include DEF_DB_DIR in help string?
                            .takes_value(true))
+                      .arg(clap::Arg::with_name("bind-addr")
+                           .long("bind-addr")
+                           .value_name("IP-ADDRESS")
+                           .help("Custom server socket bind address (default: 127.0.0.1)")  // best way to include DEF_DB_DIR in help string?
+                           .takes_value(true))
+                      .arg(clap::Arg::with_name("bind-port")
+                           .long("bind-port")
+                           .value_name("PORT")
+                           .help("Custom server socket bind port (default: 8080)")  // best way to include DEF_DB_DIR in help string?
+                           .takes_value(true))
                       .get_matches();
 
     // configure based on CLI options
     let db_dir = cli_matches.value_of("config").unwrap_or(DEF_DB_DIR);
+    let bind_addr = cli_matches.value_of("bind-addr").unwrap_or(DEF_BIND_ADDR);
+    let bind_port = cli_matches.value_of("bind-port").unwrap_or(DEF_BIND_PORT);
+    let mut bind_pair = String::new();
+    fmt::write(&mut bind_pair, format_args!("{}:{}", bind_addr, bind_port))
+        .expect("[Insert wasteful error message for never-occur warning]");
 
     // configure & open db
     let db_config = ConfigBuilder::default()
@@ -144,9 +161,9 @@ fn main() -> io::Result<()> {
                     ),
             )
     })
-    .bind("127.0.0.1:8080")?
+    .bind(bind_pair.to_string())?
     .start();
 
-    println!("Starting http server: 127.0.0.1:8080");
+    println!("Starting http server: {}", bind_pair);
     sys.run()
 }
