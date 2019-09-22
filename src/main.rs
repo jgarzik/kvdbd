@@ -2,6 +2,7 @@
 #[macro_use] extern crate actix_web;
 extern crate clap;
 
+const APPNAME: &'static str = "kvapp";
 const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 const DEF_DB_DIR: &'static str = "db.kv";
 const DEF_BIND_ADDR: &'static str = "127.0.0.1";
@@ -54,7 +55,7 @@ fn index(state: web::Data<ServerState>, req: HttpRequest) -> Result<HttpResponse
     println!("{:?}", req);
 
     ok_json(json!({
-            "name": "kvapp",
+            "name": APPNAME,
             "version": VERSION}))
 }
 
@@ -91,7 +92,7 @@ fn main() -> io::Result<()> {
     env_logger::init();
 
     // parse command line
-    let cli_matches = clap::App::new("kvapp")
+    let cli_matches = clap::App::new(APPNAME)
                       .version(VERSION)
                       .author("Jeff Garzik <jgarzik@pobox.com>")
                       .about("Database server for key/value db")
@@ -119,6 +120,9 @@ fn main() -> io::Result<()> {
     let mut bind_pair = String::new();
     fmt::write(&mut bind_pair, format_args!("{}:{}", bind_addr, bind_port))
         .expect("[Insert wasteful error message for never-occur warning]");
+    let mut server_hdr = String::new();
+    fmt::write(&mut server_hdr, format_args!("{}/{}", APPNAME, VERSION))
+        .expect("[Insert wasteful error message for never-occur warning]");
 
     // configure & open db
     let db_config = ConfigBuilder::default()
@@ -127,12 +131,15 @@ fn main() -> io::Result<()> {
     let db = Db::start(db_config.build()).unwrap();
 
     // configure web server
-    let sys = actix_rt::System::new("kvapp");
+    let sys = actix_rt::System::new(APPNAME);
 
     HttpServer::new(move || {
         App::new()
             // pass application state to each handler
             .data(ServerState { db: db.clone() })
+
+            // apply default headers
+            .wrap(middleware::DefaultHeaders::new().header("Server", server_hdr.to_string()))
 
             // enable logger - always register actix-web Logger middleware last
             .wrap(middleware::Logger::default())
