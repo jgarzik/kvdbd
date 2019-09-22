@@ -8,7 +8,7 @@ const DEF_DB_DIR: &'static str = "db.kv";
 const DEF_BIND_ADDR: &'static str = "127.0.0.1";
 const DEF_BIND_PORT: &'static str = "8080";
 
-use std::{env, io, fmt};
+use std::{env, io};
 
 use actix_web::http::{StatusCode};
 use actix_web::{
@@ -117,12 +117,8 @@ fn main() -> io::Result<()> {
     let db_dir = cli_matches.value_of("config").unwrap_or(DEF_DB_DIR);
     let bind_addr = cli_matches.value_of("bind-addr").unwrap_or(DEF_BIND_ADDR);
     let bind_port = cli_matches.value_of("bind-port").unwrap_or(DEF_BIND_PORT);
-    let mut bind_pair = String::new();
-    fmt::write(&mut bind_pair, format_args!("{}:{}", bind_addr, bind_port))
-        .expect("[Insert wasteful error message for never-occur warning]");
-    let mut server_hdr = String::new();
-    fmt::write(&mut server_hdr, format_args!("{}/{}", APPNAME, VERSION))
-        .expect("[Insert wasteful error message for never-occur warning]");
+    let bind_pair = format!("{}:{}", bind_addr, bind_port);
+    let server_hdr = format!("{}/{}", APPNAME, VERSION);
 
     // configure & open db
     let db_config = ConfigBuilder::default()
