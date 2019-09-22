@@ -1,5 +1,9 @@
 
 #[macro_use] extern crate actix_web;
+extern crate clap;
+
+const VERSION: &'static str = env!("CARGO_PKG_VERSION");
+const DEF_DB_DIR: &'static str = "db.kv";
 
 use std::{env, io};
 
@@ -46,7 +50,7 @@ fn index(state: web::Data<ServerState>, req: HttpRequest) -> Result<HttpResponse
 
     ok_json(json!({
             "name": "kvapp",
-            "version": "0.1.0"}))
+            "version": VERSION}))
 }
 
 /// GET data item
@@ -80,9 +84,24 @@ fn p404() -> Result<HttpResponse> {
 fn main() -> io::Result<()> {
     env::set_var("RUST_LOG", "actix_web=debug");
     env_logger::init();
+
+    let cli_matches = clap::App::new("kvapp")
+                      .version(VERSION)
+                      .author("Jeff Garzik <jgarzik@pobox.com>")
+                      .about("Database server for key/value db")
+                      .arg(clap::Arg::with_name("db")
+                           .long("db")
+                           .value_name("DIR")
+                           .help("Sets a custom database directory (default: db.kv)")  // best way to include DEF_DB_DIR in help string?
+                           .takes_value(true))
+                      .get_matches();
+
+    let db_dir = cli_matches.value_of("config").unwrap_or(DEF_DB_DIR);
+
     let sys = actix_rt::System::new("kvapp");
 
     let db_config = ConfigBuilder::default()
+        .path(db_dir)
         .use_compression(false);
     let db = Db::start(db_config.build()).unwrap();
 
