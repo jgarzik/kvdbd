@@ -8,8 +8,8 @@ and persistent state storage in a database.
 
 ## Using kvapp
 
-```
 Standard rust cargo multi-binary setup:
+```
 $ cargo build
 $ cargo run --bin kvapp
 ```
