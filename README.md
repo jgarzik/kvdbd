@@ -9,9 +9,9 @@ and persistent state storage in a database.
 ## Using kvapp
 
 ```
-Standard rust cargo setup:
+Standard rust cargo multi-binary setup:
 $ cargo build
-$ cargo run
+$ cargo run --bin kvapp
 ```
 
 ## Server configuration
@@ -20,7 +20,7 @@ There is no configuration file.  Limited options are available at
 the command line.  Run `--help` to view available options:
 
 ```
-$ cargo run -- --help
+$ cargo run --bin kvapp -- --help
 ```
 
 ## Server API
@@ -55,4 +55,11 @@ curl http://localhost:8080/1/db/age/45
 ```
 
 Returns JSON indicating success.
+
+## Testing
+
+Integration testing is performed via a separate binary, `tester`.
+```
+$ cargo run --bin tester
+```
 
