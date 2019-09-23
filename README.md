@@ -54,11 +54,11 @@ if present:
 
 ### API: PUT (store key and value)
 
-Append the key and value to the URI path.  In the
+Append the key to the URI path, and provide HTTP body as value.  In the
 following example, "age" is the key, "25" is the value,
 and "/1/db" is the base URI:
 ```
-curl http://localhost:8080/1/db/age/25
+curl --data-binary 25 -X PUT http://localhost:8080/1/db/age
 ```
 
 Returns JSON indicating success:

@@ -93,10 +93,11 @@ fn req_get(state: web::Data<ServerState>, req: HttpRequest, path: web::Path<(Str
 }
 
 /// PUT data item.  key and value both in URI path.
-fn req_put(state: web::Data<ServerState>, req: HttpRequest, path: web::Path<(String,String)>) -> Result<HttpResponse> {
+fn req_put(state: web::Data<ServerState>, req: HttpRequest,
+           (path,body): (web::Path<(String,)>,web::Bytes)) -> Result<HttpResponse> {
     println!("{:?}", req);
 
-    match state.db.insert(path.0.as_str(), path.1.as_str()) {
+    match state.db.insert(path.0.as_str(), body.to_vec()) {
         Ok(_optval) => ok_json(json!({"result": true})),
         Err(_e) => err_500()            // db: error
     }
@@ -165,11 +166,8 @@ fn main() -> io::Result<()> {
             .service(
                 web::resource("/1/db/{dbkey}")
                     .route(web::get().to(req_get))
-                    .route(web::delete().to(req_delete))
-            )
-            .service(
-                web::resource("/1/db/{dbkey}/{dbval}")
                     .route(web::put().to(req_put))
+                    .route(web::delete().to(req_delete))
             )
 
             // default

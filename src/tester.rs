@@ -11,6 +11,7 @@ extern crate reqwest;
 
 const T_ENDPOINT: &'static str = "http://127.0.0.1:8080";
 const T_BASEURI: &'static str = "/1/db/";
+const T_VALUE: &'static str = "helloworld";
 
 use reqwest::{Client,StatusCode};
 
@@ -34,23 +35,23 @@ fn post_get_put_get() {
         Err(_e) => assert!(false)
     }
 
-    // Add a new message with ID 1.
-    let url = format!("{}1/helloworld", basepath);
-    let resp_res = client.put(&url).send();
+    // PUT a new record
+    let resp_res = client.put(&url)
+        .body(T_VALUE)
+        .send();
     match resp_res {
         Ok(resp) => assert_eq!(resp.status(), StatusCode::OK),
         Err(_e) => assert!(false)
     }
 
     // Check that the record exists with the correct contents.
-    let url = format!("{}1", basepath);
     let resp_res = client.get(&url).send();
     match resp_res {
         Ok(mut resp) => {
             assert_eq!(resp.status(), StatusCode::OK);
 
             match resp.text() {
-                Ok(body) => assert_eq!(body, "helloworld"),
+                Ok(body) => assert_eq!(body, T_VALUE),
                 Err(_e) => assert!(false)
             }
         }
