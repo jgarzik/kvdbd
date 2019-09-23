@@ -142,10 +142,11 @@ fn main() -> io::Result<()> {
     let server_hdr = format!("{}/{}", APPNAME, VERSION);
 
     // configure & open db
-    let db_config = ConfigBuilder::default()
+    let db_config = ConfigBuilder::new()
         .path(db_dir)
-        .use_compression(false);
-    let db = Db::start(db_config.build()).unwrap();
+        .use_compression(false)
+        .build();
+    let db = Db::start(db_config).unwrap();
 
     // configure web server
     let sys = actix_rt::System::new(APPNAME);
