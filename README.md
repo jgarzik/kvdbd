@@ -33,7 +33,10 @@ Connect to HTTP endpoint using any web client.
 $ curl http://localhost:8080/
 ```
 
-Returns JSON describing service.
+Returns JSON describing service:
+```
+{"name":"kvapp","version":"0.1.0"}
+```
 
 ### API: GET (lookup value by key)
 
@@ -43,7 +46,10 @@ following example, "age" is the key and "/1/db" is the base URI:
 curl http://localhost:8080/1/db/age
 ```
 
-Returns JSON describing value found (if in db).
+Returns JSON describing value found (if in db):
+```
+{"result":"45"}
+```
 
 ### API: PUT (store key and value)
 
@@ -54,7 +60,10 @@ and "/1/db" is the base URI:
 curl http://localhost:8080/1/db/age/45
 ```
 
-Returns JSON indicating success.
+Returns JSON indicating success:
+```
+{"result":true}
+```
 
 ## Testing
 
