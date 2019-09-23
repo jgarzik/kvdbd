@@ -112,17 +112,17 @@ fn main() -> io::Result<()> {
                       .arg(clap::Arg::with_name("db")
                            .long("db")
                            .value_name("DIR")
-                           .help("Sets a custom database directory (default: db.kv)")  // best way to include DEF_DB_DIR in help string?
+                           .help(&format!("Sets a custom database directory (default: {})", DEF_DB_DIR))
                            .takes_value(true))
                       .arg(clap::Arg::with_name("bind-addr")
                            .long("bind-addr")
                            .value_name("IP-ADDRESS")
-                           .help("Custom server socket bind address (default: 127.0.0.1)")  // best way to include DEF_DB_DIR in help string?
+                           .help(&format!("Custom server socket bind address (default: {})", DEF_BIND_ADDR))
                            .takes_value(true))
                       .arg(clap::Arg::with_name("bind-port")
                            .long("bind-port")
                            .value_name("PORT")
-                           .help("Custom server socket bind port (default: 8080)")  // best way to include DEF_DB_DIR in help string?
+                           .help(&format!("Custom server socket bind port (default: {})", DEF_BIND_PORT))
                            .takes_value(true))
                       .get_matches();
 
