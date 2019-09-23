@@ -46,18 +46,19 @@ following example, "age" is the key and "/1/db" is the base URI:
 curl http://localhost:8080/1/db/age
 ```
 
-Returns JSON describing value found (if in db):
+Returns binary data (application/octet-stream) describing value found,
+if present:
 ```
-{"result":"45"}
+25
 ```
 
 ### API: PUT (store key and value)
 
 Append the key and value to the URI path.  In the
-following example, "age" is the key, "45" is the value,
+following example, "age" is the key, "25" is the value,
 and "/1/db" is the base URI:
 ```
-curl http://localhost:8080/1/db/age/45
+curl http://localhost:8080/1/db/age/25
 ```
 
 Returns JSON indicating success:

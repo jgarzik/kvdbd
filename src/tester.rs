@@ -50,10 +50,7 @@ fn post_get_put_get() {
             assert_eq!(resp.status(), StatusCode::OK);
 
             match resp.text() {
-                Ok(body) => {
-                    let jv: serde_json::Value = serde_json::from_str(&body).unwrap();
-                    assert_eq!(jv["result"], "helloworld");
-                },
+                Ok(body) => assert_eq!(body, "helloworld"),
                 Err(_e) => assert!(false)
             }
         }

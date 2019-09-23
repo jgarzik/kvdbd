@@ -42,6 +42,13 @@ fn err_500() -> Result<HttpResponse> {
               "message": "internal server error"}}).to_string()))
 }
 
+// helper function, success + binary response
+fn ok_binary(val: Vec<u8>) -> Result<HttpResponse> {
+    Ok(HttpResponse::build(StatusCode::OK)
+        .content_type("application/octet-stream")
+        .body(val))
+}
+
 // helper function, success + json response
 fn ok_json(jval: serde_json::Value) -> Result<HttpResponse> {
     Ok(HttpResponse::build(StatusCode::OK)
@@ -78,7 +85,7 @@ fn req_get(state: web::Data<ServerState>, req: HttpRequest, path: web::Path<(Str
 
     match state.db.get(path.0.clone()) {
         Ok(optval) => match optval {
-            Some(val) => ok_json(json!({"result": String::from_utf8(val.to_vec()).unwrap()})),
+            Some(val) => ok_binary(val.to_vec()),
             None => err_not_found()     // db: value not found
         },
         Err(_e) => err_500()            // db: error
