@@ -65,6 +65,20 @@ Returns JSON indicating success:
 {"result":true}
 ```
 
+### API: DELETE (remove record, based on key)
+
+Append the key to the URI path following the final '/'.  In the
+following example, "age" is the key associated with the record
+being removed, and "/1/db" is the base URI:
+```
+curl -X DELETE http://localhost:8080/1/db/age
+```
+
+Returns JSON describing value found and removed (if in db):
+```
+{"result":true}
+```
+
 ## Testing
 
 Integration testing is performed via a separate binary, `tester`.

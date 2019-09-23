@@ -27,6 +27,13 @@ fn post_get_put_get() {
         Err(_e) => assert!(false)
     }
 
+    // verify DELETE(non exist) returns not-found
+    let resp_res = client.delete(&url).send();
+    match resp_res {
+        Ok(resp) => assert_eq!(resp.status(), StatusCode::NOT_FOUND),
+        Err(_e) => assert!(false)
+    }
+
     // Add a new message with ID 1.
     let url = format!("{}1/helloworld", basepath);
     let resp_res = client.put(&url).send();
@@ -50,6 +57,27 @@ fn post_get_put_get() {
                 Err(_e) => assert!(false)
             }
         }
+        Err(_e) => assert!(false)
+    }
+
+    // DELETE record
+    let resp_res = client.delete(&url).send();
+    match resp_res {
+        Ok(resp) => assert_eq!(resp.status(), StatusCode::OK),
+        Err(_e) => assert!(false)
+    }
+
+    // Check (again) that a record with key 1 doesn't exist.
+    let resp_res = client.get(&url).send();
+    match resp_res {
+        Ok(resp) => assert_eq!(resp.status(), StatusCode::NOT_FOUND),
+        Err(_e) => assert!(false)
+    }
+
+    // verify (again) DELETE(non exist) returns not-found
+    let resp_res = client.delete(&url).send();
+    match resp_res {
+        Ok(resp) => assert_eq!(resp.status(), StatusCode::NOT_FOUND),
         Err(_e) => assert!(false)
     }
 }

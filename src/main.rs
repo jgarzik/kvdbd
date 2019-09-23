@@ -51,7 +51,7 @@ fn ok_json(jval: serde_json::Value) -> Result<HttpResponse> {
 
 /// simple root index handler, describes our service
 #[get("/")]
-fn index(state: web::Data<ServerState>, req: HttpRequest) -> Result<HttpResponse> {
+fn req_index(state: web::Data<ServerState>, req: HttpRequest) -> Result<HttpResponse> {
     println!("{:?}", req);
 
     ok_json(json!({
@@ -59,8 +59,21 @@ fn index(state: web::Data<ServerState>, req: HttpRequest) -> Result<HttpResponse
             "version": VERSION}))
 }
 
+/// DELETE data item.  key in URI path.  returned ok as json response
+fn req_delete(state: web::Data<ServerState>, req: HttpRequest, path: web::Path<(String,)>) -> Result<HttpResponse> {
+    println!("{:?}", req);
+
+    match state.db.remove(path.0.clone()) {
+        Ok(optval) => match optval {
+            Some(_val) => ok_json(json!({"result": true})),
+            None => err_not_found()     // db: value not found
+        },
+        Err(_e) => err_500()            // db: error
+    }
+}
+
 /// GET data item.  key in URI path.  returned value as json response
-fn get(state: web::Data<ServerState>, req: HttpRequest, path: web::Path<(String,)>) -> Result<HttpResponse> {
+fn req_get(state: web::Data<ServerState>, req: HttpRequest, path: web::Path<(String,)>) -> Result<HttpResponse> {
     println!("{:?}", req);
 
     match state.db.get(path.0.clone()) {
@@ -73,7 +86,7 @@ fn get(state: web::Data<ServerState>, req: HttpRequest, path: web::Path<(String,
 }
 
 /// PUT data item.  key and value both in URI path.
-fn put(state: web::Data<ServerState>, req: HttpRequest, path: web::Path<(String,String)>) -> Result<HttpResponse> {
+fn req_put(state: web::Data<ServerState>, req: HttpRequest, path: web::Path<(String,String)>) -> Result<HttpResponse> {
     println!("{:?}", req);
 
     match state.db.insert(path.0.as_str(), path.1.as_str()) {
@@ -141,14 +154,15 @@ fn main() -> io::Result<()> {
             .wrap(middleware::Logger::default())
 
             // register our routes
-            .service(index)
+            .service(req_index)
             .service(
                 web::resource("/1/db/{dbkey}")
-                    .route(web::get().to(get))
+                    .route(web::get().to(req_get))
+                    .route(web::delete().to(req_delete))
             )
             .service(
                 web::resource("/1/db/{dbkey}/{dbval}")
-                    .route(web::put().to(put))
+                    .route(web::put().to(req_put))
             )
 
             // default
