@@ -114,7 +114,7 @@ fn main() -> io::Result<()> {
                       .get_matches();
 
     // configure based on CLI options
-    let db_dir = cli_matches.value_of("config").unwrap_or(DEF_DB_DIR);
+    let db_dir = cli_matches.value_of("db").unwrap_or(DEF_DB_DIR);
     let bind_addr = cli_matches.value_of("bind-addr").unwrap_or(DEF_BIND_ADDR);
     let bind_port = cli_matches.value_of("bind-port").unwrap_or(DEF_BIND_PORT);
     let bind_pair = format!("{}:{}", bind_addr, bind_port);
