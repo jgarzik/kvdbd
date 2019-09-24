@@ -33,6 +33,7 @@ struct ServerConfig {
     databases:  Vec<DbConfig>
 }
 
+#[derive(Clone)]
 struct ServerState {
     name: String,       // db nickname
     db: Db              // open db handle
@@ -207,16 +208,18 @@ fn main() -> io::Result<()> {
         .build();
     let db = Db::start(db_config).unwrap();
 
+    let srv_state = ServerState {
+        name: db_name.clone(),
+        db: db.clone()
+    };
+
     // configure web server
     let sys = actix_rt::System::new(APPNAME);
 
     HttpServer::new(move || {
         App::new()
             // pass application state to each handler
-            .data(Mutex::new(ServerState {
-                name: db_name.clone(),
-                db: db.clone()
-            }))
+            .data(Mutex::new(srv_state.clone()))
 
             // apply default headers
             .wrap(middleware::DefaultHeaders::new().header("Server", server_hdr.to_string()))
