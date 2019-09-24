@@ -2,11 +2,10 @@
 #[macro_use] extern crate actix_web;
 extern crate clap;
 
-mod util;
-
 const APPNAME: &'static str = "kvapp";
 const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 const DEF_CFG_FN: &'static str = "cfg-kvapp.json";
+const DEF_DB_NAME: &'static str = "db";
 const DEF_DB_DIR: &'static str = "db.kv";
 const DEF_BIND_ADDR: &'static str = "127.0.0.1";
 const DEF_BIND_PORT: &'static str = "8080";
@@ -23,8 +22,14 @@ use serde_json::json;
 use sled::{Db,ConfigBuilder};
 
 #[derive(Serialize, Deserialize)]
+struct DbConfig {
+    name:   String,
+    path:   String
+}
+
+#[derive(Serialize, Deserialize)]
 struct ServerConfig {
-    db: String,
+    databases:  Vec<DbConfig>
 }
 
 struct ServerState {
@@ -152,11 +157,6 @@ fn main() -> io::Result<()> {
                            .value_name("JSON-FILE")
                            .help(&format!("Sets a custom configuration file (default: {})", DEF_CFG_FN))
                            .takes_value(true))
-                      .arg(clap::Arg::with_name("db")
-                           .long("db")
-                           .value_name("DIR")
-                           .help(&format!("Sets a custom database directory (default: {})", DEF_DB_DIR))
-                           .takes_value(true))
                       .arg(clap::Arg::with_name("bind-addr")
                            .long("bind-addr")
                            .value_name("IP-ADDRESS")
@@ -170,7 +170,6 @@ fn main() -> io::Result<()> {
                       .get_matches();
 
     // configure based on CLI options
-    let mut db_spec = cli_matches.value_of("db").unwrap_or(DEF_DB_DIR);
     let bind_addr = cli_matches.value_of("bind-addr").unwrap_or(DEF_BIND_ADDR);
     let bind_port = cli_matches.value_of("bind-port").unwrap_or(DEF_BIND_PORT);
     let bind_pair = format!("{}:{}", bind_addr, bind_port);
@@ -178,30 +177,18 @@ fn main() -> io::Result<()> {
 
     // read JSON configuration file
     let cfg_fn = cli_matches.value_of("config").unwrap_or(DEF_CFG_FN);
-    let server_cfg: ServerConfig;
-    match fs::read_to_string(cfg_fn) {
-        Err(_e) => {},
-        Ok(cfg_text) => {
-            server_cfg = serde_json::from_str(&cfg_text)?;
-            db_spec = &server_cfg.db;
-        }
-    }
+    let cfg_text = fs::read_to_string(cfg_fn)?;
+    let server_cfg: ServerConfig = serde_json::from_str(&cfg_text)?;
 
-    // split NAME:PATH string into 2 elements
-    let split_res = util::strsplit(db_spec.to_string(), ':');
+    // special case, until we have multiple dbs: find first db config, use it
     let db_name;
     let db_path;
-    match split_res {
-        // 2 elements:  a=NAME, b=PATH
-        Ok((s_a,s_b)) => {
-            db_name = s_a.clone();
-            db_path = s_b.clone();
-        }
-        // only 1 element.  assume name = "db"
-        Err(_e) =>  {
-            db_name = String::from("db");
-            db_path = db_spec.to_string();
-        },
+    if server_cfg.databases.len() == 0 {
+        db_name = String::from(DEF_DB_NAME);
+        db_path = String::from(DEF_DB_DIR);
+    } else {
+        db_name = server_cfg.databases[0].name.clone();
+        db_path = server_cfg.databases[0].path.clone();
     }
 
     // configure & open db

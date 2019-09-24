@@ -16,8 +16,29 @@ $ cargo run --bin kvapp
 
 ## Server configuration
 
-There is no configuration file.  Limited options are available at
-the command line.  Run `--help` to view available options:
+A JSON configuration file is required, to specify database.  Command line 
+options are also available.
+
+### Configuration file
+
+See `example-cfg-kvapp.json` for an example configuration file.
+
+#### databases section
+
+The databases section contains a list of objects, each of which
+describes a database to configure and expose via this API service.
+
+Specify a short name, local path and other db attributes to configure
+each database.
+
+* **name**:  Short URI-compatible name, exposed via API at database
+  name.
+* **path**:  Local filesystem path to sled db directory.
+
+### Command line help
+
+Also, limited options are available at the command line.  Run `--help`
+to view available options:
 
 ```
 $ cargo run --bin kvapp -- --help
