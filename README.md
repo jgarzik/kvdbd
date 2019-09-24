@@ -26,6 +26,7 @@ that have no server.
 ## Using kvdb
 
 Standard rust cargo multi-binary setup:
+
 ```
 $ cargo build
 $ cargo run --bin kvdb
