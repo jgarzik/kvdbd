@@ -6,19 +6,26 @@ mod util;
 
 const APPNAME: &'static str = "kvapp";
 const VERSION: &'static str = env!("CARGO_PKG_VERSION");
+const DEF_CFG_FN: &'static str = "cfg-kvapp.json";
 const DEF_DB_DIR: &'static str = "db.kv";
 const DEF_BIND_ADDR: &'static str = "127.0.0.1";
 const DEF_BIND_PORT: &'static str = "8080";
 
-use std::{env, io};
+use std::{env, io, fs};
 
 use actix_web::http::{StatusCode};
 use actix_web::{
     guard, middleware, web, App, HttpRequest, HttpResponse, HttpServer,
     Result,
 };
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sled::{Db,ConfigBuilder};
+
+#[derive(Serialize, Deserialize)]
+struct ServerConfig {
+    db: String,
+}
 
 struct ServerState {
     name: String,       // db nickname
@@ -139,6 +146,12 @@ fn main() -> io::Result<()> {
                       .version(VERSION)
                       .author("Jeff Garzik <jgarzik@pobox.com>")
                       .about("Database server for key/value db")
+                      .arg(clap::Arg::with_name("config")
+                           .short("c")
+                           .long("config")
+                           .value_name("JSON-FILE")
+                           .help(&format!("Sets a custom configuration file (default: {})", DEF_CFG_FN))
+                           .takes_value(true))
                       .arg(clap::Arg::with_name("db")
                            .long("db")
                            .value_name("DIR")
@@ -157,11 +170,22 @@ fn main() -> io::Result<()> {
                       .get_matches();
 
     // configure based on CLI options
-    let db_spec = cli_matches.value_of("db").unwrap_or(DEF_DB_DIR);
+    let mut db_spec = cli_matches.value_of("db").unwrap_or(DEF_DB_DIR);
     let bind_addr = cli_matches.value_of("bind-addr").unwrap_or(DEF_BIND_ADDR);
     let bind_port = cli_matches.value_of("bind-port").unwrap_or(DEF_BIND_PORT);
     let bind_pair = format!("{}:{}", bind_addr, bind_port);
     let server_hdr = format!("{}/{}", APPNAME, VERSION);
+
+    // read JSON configuration file
+    let cfg_fn = cli_matches.value_of("config").unwrap_or(DEF_CFG_FN);
+    let server_cfg: ServerConfig;
+    match fs::read_to_string(cfg_fn) {
+        Err(_e) => {},
+        Ok(cfg_text) => {
+            server_cfg = serde_json::from_str(&cfg_text)?;
+            db_spec = &server_cfg.db;
+        }
+    }
 
     // split NAME:PATH string into 2 elements
     let split_res = util::strsplit(db_spec.to_string(), ':');
