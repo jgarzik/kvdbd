@@ -10,7 +10,7 @@
 extern crate reqwest;
 
 const T_ENDPOINT: &'static str = "http://127.0.0.1:8080";
-const T_BASEURI: &'static str = "/1/db/";
+const T_BASEURI: &'static str = "/api/db/";
 const T_VALUE: &'static str = "helloworld";
 
 use reqwest::{Client,StatusCode};

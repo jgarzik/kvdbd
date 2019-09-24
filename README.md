@@ -35,15 +35,25 @@ $ curl http://localhost:8080/
 
 Returns JSON describing service:
 ```
-{"name":"kvapp","version":"0.1.0"}
+{
+   "databases" : [
+      {
+         "name" : "db"
+      }
+   ],
+   "version" : "0.1.0",
+   "name" : "kvapp"
+}
 ```
 
 ### API: GET (lookup value by key)
 
+Meta-request: GET http://$HOSTNAME:$PORT/api/$DB/$KEY
+
 Append the key to the URI path following the final '/'.  In the
-following example, "age" is the key and "/1/db" is the base URI:
+following example, "age" is the key and "/api/db" is the base URI:
 ```
-curl http://localhost:8080/1/db/age
+curl http://localhost:8080/api/db/age
 ```
 
 Returns binary data (application/octet-stream) describing value found,
@@ -54,11 +64,13 @@ if present:
 
 ### API: PUT (store key and value)
 
+Meta-request: PUT http://$HOSTNAME:$PORT/api/$DB/$KEY
+
 Append the key to the URI path, and provide HTTP body as value.  In the
 following example, "age" is the key, "25" is the value,
-and "/1/db" is the base URI:
+and "/api/db" is the base URI:
 ```
-curl --data-binary 25 -X PUT http://localhost:8080/1/db/age
+curl --data-binary 25 -X PUT http://localhost:8080/api/db/age
 ```
 
 Returns JSON indicating success:
@@ -68,11 +80,13 @@ Returns JSON indicating success:
 
 ### API: DELETE (remove record, based on key)
 
+Meta-request: DELETE http://$HOSTNAME:$PORT/api/$DB/$KEY
+
 Append the key to the URI path following the final '/'.  In the
 following example, "age" is the key associated with the record
-being removed, and "/1/db" is the base URI:
+being removed, and "/api/db" is the base URI:
 ```
-curl -X DELETE http://localhost:8080/1/db/age
+curl -X DELETE http://localhost:8080/api/db/age
 ```
 
 Returns JSON describing value found and removed (if in db):

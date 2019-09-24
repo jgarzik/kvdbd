@@ -2,6 +2,8 @@
 #[macro_use] extern crate actix_web;
 extern crate clap;
 
+mod util;
+
 const APPNAME: &'static str = "kvapp";
 const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 const DEF_DB_DIR: &'static str = "db.kv";
@@ -19,7 +21,8 @@ use serde_json::json;
 use sled::{Db,ConfigBuilder};
 
 struct ServerState {
-    db: Db
+    name: String,       // db nickname
+    db: Db              // open db handle
 }
 
 // helper function, 404 not found
@@ -62,15 +65,24 @@ fn req_index(state: web::Data<ServerState>, req: HttpRequest) -> Result<HttpResp
     println!("{:?}", req);
 
     ok_json(json!({
-            "name": APPNAME,
-            "version": VERSION}))
+        "name": APPNAME,
+        "version": VERSION,
+        "databases": [
+            { "name": state.name }
+        ]
+    }))
 }
 
 /// DELETE data item.  key in URI path.  returned ok as json response
-fn req_delete(state: web::Data<ServerState>, req: HttpRequest, path: web::Path<(String,)>) -> Result<HttpResponse> {
+fn req_delete(state: web::Data<ServerState>, req: HttpRequest, path: web::Path<(String,String)>) -> Result<HttpResponse> {
     println!("{:?}", req);
 
-    match state.db.remove(path.0.clone()) {
+    // we only support 1 db, for now...  user must specify db name
+    if state.name != path.0 {
+        return err_not_found();
+    }
+
+    match state.db.remove(path.1.clone()) {
         Ok(optval) => match optval {
             Some(_val) => ok_json(json!({"result": true})),
             None => err_not_found()     // db: value not found
@@ -80,10 +92,15 @@ fn req_delete(state: web::Data<ServerState>, req: HttpRequest, path: web::Path<(
 }
 
 /// GET data item.  key in URI path.  returned value as json response
-fn req_get(state: web::Data<ServerState>, req: HttpRequest, path: web::Path<(String,)>) -> Result<HttpResponse> {
+fn req_get(state: web::Data<ServerState>, req: HttpRequest, path: web::Path<(String,String)>) -> Result<HttpResponse> {
     println!("{:?}", req);
 
-    match state.db.get(path.0.clone()) {
+    // we only support 1 db, for now...  user must specify db name
+    if state.name != path.0 {
+        return err_not_found();
+    }
+
+    match state.db.get(path.1.clone()) {
         Ok(optval) => match optval {
             Some(val) => ok_binary(val.to_vec()),
             None => err_not_found()     // db: value not found
@@ -94,10 +111,15 @@ fn req_get(state: web::Data<ServerState>, req: HttpRequest, path: web::Path<(Str
 
 /// PUT data item.  key and value both in URI path.
 fn req_put(state: web::Data<ServerState>, req: HttpRequest,
-           (path,body): (web::Path<(String,)>,web::Bytes)) -> Result<HttpResponse> {
+           (path,body): (web::Path<(String,String)>,web::Bytes)) -> Result<HttpResponse> {
     println!("{:?}", req);
 
-    match state.db.insert(path.0.as_str(), body.to_vec()) {
+    // we only support 1 db, for now...  user must specify db name
+    if state.name != path.0 {
+        return err_not_found();
+    }
+
+    match state.db.insert(path.1.as_str(), body.to_vec()) {
         Ok(_optval) => ok_json(json!({"result": true})),
         Err(_e) => err_500()            // db: error
     }
@@ -135,15 +157,32 @@ fn main() -> io::Result<()> {
                       .get_matches();
 
     // configure based on CLI options
-    let db_dir = cli_matches.value_of("db").unwrap_or(DEF_DB_DIR);
+    let db_spec = cli_matches.value_of("db").unwrap_or(DEF_DB_DIR);
     let bind_addr = cli_matches.value_of("bind-addr").unwrap_or(DEF_BIND_ADDR);
     let bind_port = cli_matches.value_of("bind-port").unwrap_or(DEF_BIND_PORT);
     let bind_pair = format!("{}:{}", bind_addr, bind_port);
     let server_hdr = format!("{}/{}", APPNAME, VERSION);
 
+    // split NAME:PATH string into 2 elements
+    let split_res = util::strsplit(db_spec.to_string(), ':');
+    let db_name;
+    let db_path;
+    match split_res {
+        // 2 elements:  a=NAME, b=PATH
+        Ok((s_a,s_b)) => {
+            db_name = s_a.clone();
+            db_path = s_b.clone();
+        }
+        // only 1 element.  assume name = "db"
+        Err(_e) =>  {
+            db_name = String::from("db");
+            db_path = db_spec.to_string();
+        },
+    }
+
     // configure & open db
     let db_config = ConfigBuilder::new()
-        .path(db_dir)
+        .path(db_path)
         .use_compression(false)
         .build();
     let db = Db::start(db_config).unwrap();
@@ -154,7 +193,10 @@ fn main() -> io::Result<()> {
     HttpServer::new(move || {
         App::new()
             // pass application state to each handler
-            .data(ServerState { db: db.clone() })
+            .data(ServerState {
+                name: db_name.clone(),
+                db: db.clone()
+            })
 
             // apply default headers
             .wrap(middleware::DefaultHeaders::new().header("Server", server_hdr.to_string()))
@@ -165,7 +207,7 @@ fn main() -> io::Result<()> {
             // register our routes
             .service(req_index)
             .service(
-                web::resource("/1/db/{dbkey}")
+                web::resource("/api/{db}/{key}")
                     .route(web::get().to(req_get))
                     .route(web::put().to(req_put))
                     .route(web::delete().to(req_delete))
