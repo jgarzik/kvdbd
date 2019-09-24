@@ -3,18 +3,18 @@ Simple database service for NoSQL key/value database
 
 ## Table of Contents
 
-      * [Motivation](#motivation)
-      * [Using kvapp](#using-kvapp)
-      * [Server configuration](#server-configuration)
-         * [Configuration file](#configuration-file)
-            * [databases section](#databases-section)
-         * [Command line help](#command-line-help)
-      * [Server API](#server-api)
-         * [API: Service identity and status](#api-service-identity-and-status)
-         * [API: GET (lookup value by key)](#api-get-lookup-value-by-key)
-         * [API: PUT (store key and value)](#api-put-store-key-and-value)
-         * [API: DELETE (remove record, based on key)](#api-delete-remove-record-based-on-key)
-      * [Testing](#testing)
+* [Motivation](#motivation)
+* [Using kvapp](#using-kvapp)
+* [Server configuration](#server-configuration)
+    * [Configuration file](#configuration-file)
+        * [databases section](#databases-section)
+    * [Command line help](#command-line-help)
+* [Server API](#server-api)
+    * [API: Service identity and status](#api-service-identity-and-status)
+    * [API: GET (lookup value by key)](#api-get-lookup-value-by-key)
+    * [API: PUT (store key and value)](#api-put-store-key-and-value)
+    * [API: DELETE (remove record, based on key)](#api-delete-remove-record-based-on-key)
+* [Testing](#testing)
 
 ## Motivation
 
