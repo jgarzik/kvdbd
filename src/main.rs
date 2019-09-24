@@ -2,9 +2,9 @@
 #[macro_use] extern crate actix_web;
 extern crate clap;
 
-const APPNAME: &'static str = "kvapp";
+const APPNAME: &'static str = "kvdb";
 const VERSION: &'static str = env!("CARGO_PKG_VERSION");
-const DEF_CFG_FN: &'static str = "cfg-kvapp.json";
+const DEF_CFG_FN: &'static str = "cfg-kvdb.json";
 const DEF_DB_NAME: &'static str = "db";
 const DEF_DB_DIR: &'static str = "db.kv";
 const DEF_BIND_ADDR: &'static str = "127.0.0.1";

@@ -1,5 +1,5 @@
 [package]
-name = "kvapp"
+name = "kvdb"
 version = "0.1.0"
 authors = ["jgarzik"]
 edition = "2018"
@@ -23,7 +23,7 @@ clap = "^2.33.0"
 reqwest = "^0.9.20"
 
 [[bin]]
-name = "kvapp"
+name = "kvdb"
 path = "src/main.rs"
 
 [[bin]]

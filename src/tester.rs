@@ -1,9 +1,9 @@
 
 /*
- * tester: Integration tester for kvapp
+ * tester: Integration tester for kvdb
  *
- * To be run separately from kvapp, assuming a clean and empty db:
- * $ cargo run --bin kvapp
+ * To be run separately from kvdb, assuming a clean and empty db:
+ * $ cargo run --bin kvdb
  * $ cargo run --bin tester
  */
 

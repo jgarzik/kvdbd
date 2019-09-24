@@ -1,10 +1,11 @@
-# kvapp
-Simple database service for NoSQL key/value database
+# kvdb
+
+API service enabling easy remote export of embedded key/value databases.
 
 ## Table of Contents
 
 * [Motivation](#motivation)
-* [Using kvapp](#using-kvapp)
+* [Using kvdb](#using-kvdb)
 * [Server configuration](#server-configuration)
     * [Configuration file](#configuration-file)
         * [databases section](#databases-section)
@@ -18,15 +19,16 @@ Simple database service for NoSQL key/value database
 
 ## Motivation
 
-A simple REST/JSON API web service, that demonstrates rust, web services,
-and persistent state storage in a database.
+A REST/JSON API web service, that enables querying key/value databases
+over a network.  In effect, creating a database server for databases
+that have no server.
 
-## Using kvapp
+## Using kvdb
 
 Standard rust cargo multi-binary setup:
 ```
 $ cargo build
-$ cargo run --bin kvapp
+$ cargo run --bin kvdb
 ```
 
 ## Server configuration
@@ -36,7 +38,7 @@ options are also available.
 
 ### Configuration file
 
-See `example-cfg-kvapp.json` for an example configuration file.
+See `example-cfg-kvdb.json` for an example configuration file.
 
 #### databases section
 
@@ -56,7 +58,7 @@ Also, limited options are available at the command line.  Run `--help`
 to view available options:
 
 ```
-$ cargo run --bin kvapp -- --help
+$ cargo run --bin kvdb -- --help
 ```
 
 ## Server API
@@ -78,7 +80,7 @@ Returns JSON describing service:
       }
    ],
    "version" : "0.1.0",
-   "name" : "kvapp"
+   "name" : "kvdb"
 }
 ```
 
