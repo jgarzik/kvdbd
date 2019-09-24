@@ -11,6 +11,7 @@ const DEF_BIND_ADDR: &'static str = "127.0.0.1";
 const DEF_BIND_PORT: &'static str = "8080";
 
 use std::{env, io, fs};
+use std::sync::Mutex;
 
 use actix_web::http::{StatusCode};
 use actix_web::{
@@ -73,8 +74,10 @@ fn ok_json(jval: serde_json::Value) -> Result<HttpResponse> {
 
 /// simple root index handler, describes our service
 #[get("/")]
-fn req_index(state: web::Data<ServerState>, req: HttpRequest) -> Result<HttpResponse> {
+fn req_index(m_state: web::Data<Mutex<ServerState>>, req: HttpRequest) -> Result<HttpResponse> {
     println!("{:?}", req);
+
+    let state = m_state.lock().unwrap();
 
     ok_json(json!({
         "name": APPNAME,
@@ -86,8 +89,10 @@ fn req_index(state: web::Data<ServerState>, req: HttpRequest) -> Result<HttpResp
 }
 
 /// DELETE data item.  key in URI path.  returned ok as json response
-fn req_delete(state: web::Data<ServerState>, req: HttpRequest, path: web::Path<(String,String)>) -> Result<HttpResponse> {
+fn req_delete(m_state: web::Data<Mutex<ServerState>>, req: HttpRequest, path: web::Path<(String,String)>) -> Result<HttpResponse> {
     println!("{:?}", req);
+
+    let state = m_state.lock().unwrap();
 
     // we only support 1 db, for now...  user must specify db name
     if state.name != path.0 {
@@ -104,8 +109,10 @@ fn req_delete(state: web::Data<ServerState>, req: HttpRequest, path: web::Path<(
 }
 
 /// GET data item.  key in URI path.  returned value as json response
-fn req_get(state: web::Data<ServerState>, req: HttpRequest, path: web::Path<(String,String)>) -> Result<HttpResponse> {
+fn req_get(m_state: web::Data<Mutex<ServerState>>, req: HttpRequest, path: web::Path<(String,String)>) -> Result<HttpResponse> {
     println!("{:?}", req);
+
+    let state = m_state.lock().unwrap();
 
     // we only support 1 db, for now...  user must specify db name
     if state.name != path.0 {
@@ -122,9 +129,11 @@ fn req_get(state: web::Data<ServerState>, req: HttpRequest, path: web::Path<(Str
 }
 
 /// PUT data item.  key and value both in URI path.
-fn req_put(state: web::Data<ServerState>, req: HttpRequest,
+fn req_put(m_state: web::Data<Mutex<ServerState>>, req: HttpRequest,
            (path,body): (web::Path<(String,String)>,web::Bytes)) -> Result<HttpResponse> {
     println!("{:?}", req);
+
+    let state = m_state.lock().unwrap();
 
     // we only support 1 db, for now...  user must specify db name
     if state.name != path.0 {
@@ -204,10 +213,10 @@ fn main() -> io::Result<()> {
     HttpServer::new(move || {
         App::new()
             // pass application state to each handler
-            .data(ServerState {
+            .data(Mutex::new(ServerState {
                 name: db_name.clone(),
                 db: db.clone()
-            })
+            }))
 
             // apply default headers
             .wrap(middleware::DefaultHeaders::new().header("Server", server_hdr.to_string()))
