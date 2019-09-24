@@ -1,6 +1,6 @@
 /target
 **/*.rs.bk
 
-cfg-kvapp.json
+cfg-kvdb.json
 db.kv/
 
