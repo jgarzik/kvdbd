@@ -232,7 +232,7 @@ fn main() -> io::Result<()> {
             .build();
 
         if db_cfg.driver != "sled".to_string() {
-            println!("Unsupported db driver {} specified.", db_cfg.driver);
+            println!("config: Unsupported db driver {} specified.", db_cfg.driver);
             process::exit(1);
         }
 
