@@ -77,14 +77,18 @@ Returns JSON describing service:
 {
    "databases" : [
       {
-         "name" : "db1"
+         "name" : "db1",
+         "path" : "db1.kv",
+         "driver" : "sled"
       },
       {
-         "name" : "db2"
+         "name" : "db2",
+         "path" : "db2.kv",
+         "driver" : "sled"
       }
    ],
    "name" : "kvdb",
-   "version" : "0.1.0"
+   "version" : "0.2.0"
 }
 ```
 

@@ -8,7 +8,7 @@ const DEF_CFG_FN: &'static str = "cfg-kvdb.json";
 const DEF_BIND_ADDR: &'static str = "127.0.0.1";
 const DEF_BIND_PORT: &'static str = "8080";
 
-use std::{env, io, fs};
+use std::{env, io, fs, process};
 use std::sync::Mutex;
 use std::collections::HashMap;
 
@@ -21,10 +21,11 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sled::{Db,ConfigBuilder};
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 struct DbConfig {
     name:   String,
-    path:   String
+    path:   String,
+    driver: String
 }
 
 #[derive(Serialize, Deserialize)]
@@ -33,20 +34,15 @@ struct ServerConfig {
 }
 
 #[derive(Serialize, Deserialize)]
-struct DbInfo {
-    name:   String
-}
-
-#[derive(Serialize, Deserialize)]
 struct ServerInfo {
     name:       String,
     version:    String,
-    databases:  Vec<DbInfo>
+    databases:  Vec<DbConfig>
 }
 
 #[derive(Clone)]
 struct DbState {
-    name: String,       // db nickname
+    cfg: DbConfig,      // imported db configuration
     db: Db              // open db handle
 }
 
@@ -104,7 +100,7 @@ fn req_index(m_state: web::Data<Mutex<ServerState>>, req: HttpRequest) -> Result
     let state = m_state.lock().unwrap();
 
     for db_state in &state.dbs {
-        srv_info.databases.push(DbInfo { name: db_state.name.clone() });
+        srv_info.databases.push(db_state.cfg.clone());
     }
 
     let jv = serde_json::to_value(&srv_info)?;
@@ -235,10 +231,15 @@ fn main() -> io::Result<()> {
             .use_compression(false)
             .build();
 
+        if db_cfg.driver != "sled".to_string() {
+            println!("Unsupported db driver {} specified.", db_cfg.driver);
+            process::exit(1);
+        }
+
         let next_idx = srv_state.dbs.len();
         srv_state.name_idx.insert(db_cfg.name.clone(), next_idx);
         srv_state.dbs.push( DbState {
-            name: db_cfg.name.clone(),
+            cfg: db_cfg.clone(),
             db: Db::start(db_config).unwrap()
         });
     }
