@@ -2,5 +2,5 @@
 **/*.rs.bk
 
 cfg-kvdb.json
-db.kv/
+db*.kv/
 

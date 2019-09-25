@@ -32,6 +32,18 @@ struct ServerConfig {
     databases:  Vec<DbConfig>
 }
 
+#[derive(Serialize, Deserialize)]
+struct DbInfo {
+    name:   String
+}
+
+#[derive(Serialize, Deserialize)]
+struct ServerInfo {
+    name:       String,
+    version:    String,
+    databases:  Vec<DbInfo>
+}
+
 #[derive(Clone)]
 struct DbState {
     name: String,       // db nickname
@@ -83,15 +95,21 @@ fn ok_json(jval: serde_json::Value) -> Result<HttpResponse> {
 fn req_index(m_state: web::Data<Mutex<ServerState>>, req: HttpRequest) -> Result<HttpResponse> {
     println!("{:?}", req);
 
+    let mut srv_info = ServerInfo {
+        name: String::from(APPNAME),
+        version: String::from(VERSION),
+        databases: Vec::new()
+    };
+
     let state = m_state.lock().unwrap();
 
-    ok_json(json!({
-        "name": APPNAME,
-        "version": VERSION,
-        "databases": [
-            { "name": state.dbs[0].name }
-        ]
-    }))
+    for db_state in &state.dbs {
+        srv_info.databases.push(DbInfo { name: db_state.name.clone() });
+    }
+
+    let jv = serde_json::to_value(&srv_info)?;
+
+    ok_json(jv)
 }
 
 /// DELETE data item.  key in URI path.  returned ok as json response
@@ -100,12 +118,15 @@ fn req_delete(m_state: web::Data<Mutex<ServerState>>, req: HttpRequest, path: we
 
     let state = m_state.lock().unwrap();
 
-    // we only support 1 db, for now...  user must specify db name
-    if state.dbs[0].name != path.0 {
-        return err_not_found();
+    // lookup database index by name (path elem 0)
+    let idx: usize;
+    match state.name_idx.get(&path.0) {
+        None => return err_not_found(),
+        Some(r_idx) => idx = *r_idx
     }
 
-    match state.dbs[0].db.remove(path.1.clone()) {
+    // attempt to remove record from db, based on key (path elem 1)
+    match state.dbs[idx].db.remove(path.1.clone()) {
         Ok(optval) => match optval {
             Some(_val) => ok_json(json!({"result": true})),
             None => err_not_found()     // db: value not found
@@ -120,12 +141,15 @@ fn req_get(m_state: web::Data<Mutex<ServerState>>, req: HttpRequest, path: web::
 
     let state = m_state.lock().unwrap();
 
-    // we only support 1 db, for now...  user must specify db name
-    if state.dbs[0].name != path.0 {
-        return err_not_found();
+    // lookup database index by name (path elem 0)
+    let idx: usize;
+    match state.name_idx.get(&path.0) {
+        None => return err_not_found(),
+        Some(r_idx) => idx = *r_idx
     }
 
-    match state.dbs[0].db.get(path.1.clone()) {
+    // attempt to read record from db, based on key (path elem 1)
+    match state.dbs[idx].db.get(path.1.clone()) {
         Ok(optval) => match optval {
             Some(val) => ok_binary(val.to_vec()),
             None => err_not_found()     // db: value not found
@@ -141,12 +165,15 @@ fn req_put(m_state: web::Data<Mutex<ServerState>>, req: HttpRequest,
 
     let state = m_state.lock().unwrap();
 
-    // we only support 1 db, for now...  user must specify db name
-    if state.dbs[0].name != path.0 {
-        return err_not_found();
+    // lookup database index by name (path elem 0)
+    let idx: usize;
+    match state.name_idx.get(&path.0) {
+        None => return err_not_found(),
+        Some(r_idx) => idx = *r_idx
     }
 
-    match state.dbs[0].db.insert(path.1.as_str(), body.to_vec()) {
+    // attempt to store record in db, based on key (path elem 1)
+    match state.dbs[idx].db.insert(path.1.as_str(), body.to_vec()) {
         Ok(_optval) => ok_json(json!({"result": true})),
         Err(_e) => err_500()            // db: error
     }

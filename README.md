@@ -77,11 +77,14 @@ Returns JSON describing service:
 {
    "databases" : [
       {
-         "name" : "db"
+         "name" : "db1"
+      },
+      {
+         "name" : "db2"
       }
    ],
-   "version" : "0.1.0",
-   "name" : "kvdb"
+   "name" : "kvdb",
+   "version" : "0.1.0"
 }
 ```
 

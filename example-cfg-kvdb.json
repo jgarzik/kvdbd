@@ -1,8 +1,12 @@
 {
 	"databases": [
 		{
-			"name": "db",
-			"path": "db.kv"
+			"name": "db1",
+			"path": "db1.kv"
+		},
+		{
+			"name": "db2",
+			"path": "db2.kv"
 		}
 	]
 }

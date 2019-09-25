@@ -10,13 +10,13 @@
 extern crate reqwest;
 
 const T_ENDPOINT: &'static str = "http://127.0.0.1:8080";
-const T_BASEURI: &'static str = "/api/db/";
-const T_VALUE: &'static str = "helloworld";
+const T_BASEURI: &'static str = "/api";
 
 use reqwest::{Client,StatusCode};
 
-fn post_get_put_get() {
-    let basepath = format!("{}{}", T_ENDPOINT, T_BASEURI);
+fn post_get_put_get(db_id: String) {
+    let basepath = format!("{}{}/{}/", T_ENDPOINT, T_BASEURI, db_id);
+    let test_value = format!("helloworld {}", db_id);
 
     let client = Client::new();
 
@@ -37,7 +37,7 @@ fn post_get_put_get() {
 
     // PUT a new record
     let resp_res = client.put(&url)
-        .body(T_VALUE)
+        .body(test_value.clone())
         .send();
     match resp_res {
         Ok(resp) => assert_eq!(resp.status(), StatusCode::OK),
@@ -51,7 +51,7 @@ fn post_get_put_get() {
             assert_eq!(resp.status(), StatusCode::OK);
 
             match resp.text() {
-                Ok(body) => assert_eq!(body, T_VALUE),
+                Ok(body) => assert_eq!(body, test_value),
                 Err(_e) => assert!(false)
             }
         }
@@ -81,7 +81,10 @@ fn post_get_put_get() {
 }
 
 fn main() {
-    post_get_put_get();
+    for n in 1..3 {
+        let db_id = format!("db{}", n);
+        post_get_put_get(db_id);
+    }
     println!("Integration testing successful.");
 }
 
