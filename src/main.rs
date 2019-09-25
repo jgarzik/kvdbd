@@ -5,13 +5,12 @@ extern crate clap;
 const APPNAME: &'static str = "kvdb";
 const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 const DEF_CFG_FN: &'static str = "cfg-kvdb.json";
-const DEF_DB_NAME: &'static str = "db";
-const DEF_DB_DIR: &'static str = "db.kv";
 const DEF_BIND_ADDR: &'static str = "127.0.0.1";
 const DEF_BIND_PORT: &'static str = "8080";
 
 use std::{env, io, fs};
 use std::sync::Mutex;
+use std::collections::HashMap;
 
 use actix_web::http::{StatusCode};
 use actix_web::{
@@ -34,9 +33,15 @@ struct ServerConfig {
 }
 
 #[derive(Clone)]
-struct ServerState {
+struct DbState {
     name: String,       // db nickname
     db: Db              // open db handle
+}
+
+#[derive(Clone)]
+struct ServerState {
+    name_idx: HashMap<String,usize>,
+    dbs: Vec<DbState>   // all open databases
 }
 
 // helper function, 404 not found
@@ -84,7 +89,7 @@ fn req_index(m_state: web::Data<Mutex<ServerState>>, req: HttpRequest) -> Result
         "name": APPNAME,
         "version": VERSION,
         "databases": [
-            { "name": state.name }
+            { "name": state.dbs[0].name }
         ]
     }))
 }
@@ -96,11 +101,11 @@ fn req_delete(m_state: web::Data<Mutex<ServerState>>, req: HttpRequest, path: we
     let state = m_state.lock().unwrap();
 
     // we only support 1 db, for now...  user must specify db name
-    if state.name != path.0 {
+    if state.dbs[0].name != path.0 {
         return err_not_found();
     }
 
-    match state.db.remove(path.1.clone()) {
+    match state.dbs[0].db.remove(path.1.clone()) {
         Ok(optval) => match optval {
             Some(_val) => ok_json(json!({"result": true})),
             None => err_not_found()     // db: value not found
@@ -116,11 +121,11 @@ fn req_get(m_state: web::Data<Mutex<ServerState>>, req: HttpRequest, path: web::
     let state = m_state.lock().unwrap();
 
     // we only support 1 db, for now...  user must specify db name
-    if state.name != path.0 {
+    if state.dbs[0].name != path.0 {
         return err_not_found();
     }
 
-    match state.db.get(path.1.clone()) {
+    match state.dbs[0].db.get(path.1.clone()) {
         Ok(optval) => match optval {
             Some(val) => ok_binary(val.to_vec()),
             None => err_not_found()     // db: value not found
@@ -137,11 +142,11 @@ fn req_put(m_state: web::Data<Mutex<ServerState>>, req: HttpRequest,
     let state = m_state.lock().unwrap();
 
     // we only support 1 db, for now...  user must specify db name
-    if state.name != path.0 {
+    if state.dbs[0].name != path.0 {
         return err_not_found();
     }
 
-    match state.db.insert(path.1.as_str(), body.to_vec()) {
+    match state.dbs[0].db.insert(path.1.as_str(), body.to_vec()) {
         Ok(_optval) => ok_json(json!({"result": true})),
         Err(_e) => err_500()            // db: error
     }
@@ -190,28 +195,26 @@ fn main() -> io::Result<()> {
     let cfg_text = fs::read_to_string(cfg_fn)?;
     let server_cfg: ServerConfig = serde_json::from_str(&cfg_text)?;
 
-    // special case, until we have multiple dbs: find first db config, use it
-    let db_name;
-    let db_path;
-    if server_cfg.databases.len() == 0 {
-        db_name = String::from(DEF_DB_NAME);
-        db_path = String::from(DEF_DB_DIR);
-    } else {
-        db_name = server_cfg.databases[0].name.clone();
-        db_path = server_cfg.databases[0].path.clone();
-    }
-
-    // configure & open db
-    let db_config = ConfigBuilder::new()
-        .path(db_path)
-        .use_compression(false)
-        .build();
-    let db = Db::start(db_config).unwrap();
-
-    let srv_state = ServerState {
-        name: db_name.clone(),
-        db: db.clone()
+    // init server state
+    let mut srv_state = ServerState {
+        name_idx: HashMap::new(),
+        dbs: Vec::new()
     };
+
+    // configure and open databases
+    for db_cfg in &server_cfg.databases {
+        let db_config = ConfigBuilder::new()
+            .path(db_cfg.path.clone())
+            .use_compression(false)
+            .build();
+
+        let next_idx = srv_state.dbs.len();
+        srv_state.name_idx.insert(db_cfg.name.clone(), next_idx);
+        srv_state.dbs.push( DbState {
+            name: db_cfg.name.clone(),
+            db: Db::start(db_config).unwrap()
+        });
+    }
 
     // configure web server
     let sys = actix_rt::System::new(APPNAME);
