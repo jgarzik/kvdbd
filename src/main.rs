@@ -131,7 +131,7 @@ fn req_delete(m_state: web::Data<Mutex<ServerState>>, req: HttpRequest, path: we
     }
 }
 
-/// GET data item.  key in URI path.  returned value as json response
+/// GET data item. key in URI path, value in HTTP payload.
 fn req_get(m_state: web::Data<Mutex<ServerState>>, req: HttpRequest, path: web::Path<(String,String)>) -> Result<HttpResponse> {
     println!("{:?}", req);
 
@@ -154,7 +154,7 @@ fn req_get(m_state: web::Data<Mutex<ServerState>>, req: HttpRequest, path: web::
     }
 }
 
-/// PUT data item.  key and value both in URI path.
+/// PUT data item. key in URI path, value in HTTP payload.
 fn req_put(m_state: web::Data<Mutex<ServerState>>, req: HttpRequest,
            (path,body): (web::Path<(String,String)>,web::Bytes)) -> Result<HttpResponse> {
     println!("{:?}", req);
