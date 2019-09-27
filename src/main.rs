@@ -1,6 +1,7 @@
 
 #[macro_use] extern crate actix_web;
 extern crate clap;
+mod protos;
 
 const APPNAME: &'static str = "kvdb";
 const VERSION: &'static str = env!("CARGO_PKG_VERSION");
@@ -21,6 +22,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sled::{Db,ConfigBuilder};
 
+use protos::pbapi::{GetRequest};
+use protobuf::{parse_from_bytes};
+
+// struct used for both input (server config file) and output (server info)
 #[derive(Serialize, Deserialize, Clone)]
 struct DbConfig {
     name:   String,
@@ -28,11 +33,13 @@ struct DbConfig {
     driver: String
 }
 
+// top-level schema for server configuration file
 #[derive(Serialize, Deserialize)]
 struct ServerConfig {
     databases:  Vec<DbConfig>
 }
 
+// top-level server info output struct
 #[derive(Serialize, Deserialize)]
 struct ServerInfo {
     name:       String,
@@ -40,12 +47,14 @@ struct ServerInfo {
     databases:  Vec<DbConfig>
 }
 
+// per-db runtime state info
 #[derive(Clone)]
 struct DbState {
     cfg: DbConfig,      // imported db configuration
     db: Db              // open db handle
 }
 
+// runtime server state info
 #[derive(Clone)]
 struct ServerState {
     name_idx: HashMap<String,usize>,
@@ -62,7 +71,17 @@ fn err_not_found() -> Result<HttpResponse> {
               "message": "not found"}}).to_string()))
 }
 
-// helper function, server error
+// helper function, 400 bad request
+fn err_bad_req() -> Result<HttpResponse> {
+    Ok(HttpResponse::build(StatusCode::BAD_REQUEST)
+        .content_type("application/json")
+        .body(json!({
+          "error": {
+             "code" : -400,
+              "message": "invalid/malformed request"}}).to_string()))
+}
+
+// helper function, 500 server error
 fn err_500() -> Result<HttpResponse> {
     Ok(HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR)
         .content_type("application/json")
@@ -91,20 +110,25 @@ fn ok_json(jval: serde_json::Value) -> Result<HttpResponse> {
 fn req_index(m_state: web::Data<Mutex<ServerState>>, req: HttpRequest) -> Result<HttpResponse> {
     println!("{:?}", req);
 
+    // fill basic server info struct used for output
     let mut srv_info = ServerInfo {
         name: String::from(APPNAME),
         version: String::from(VERSION),
         databases: Vec::new()
     };
 
+    // lock runtime-live state data
     let state = m_state.lock().unwrap();
 
+    // copy each db config into output struct
     for db_state in &state.dbs {
         srv_info.databases.push(db_state.cfg.clone());
     }
 
+    // serialize structs into json
     let jv = serde_json::to_value(&srv_info)?;
 
+    // return json output
     ok_json(jv)
 }
 
@@ -112,6 +136,7 @@ fn req_index(m_state: web::Data<Mutex<ServerState>>, req: HttpRequest) -> Result
 fn req_delete(m_state: web::Data<Mutex<ServerState>>, req: HttpRequest, path: web::Path<(String,String)>) -> Result<HttpResponse> {
     println!("{:?}", req);
 
+    // lock runtime-live state data
     let state = m_state.lock().unwrap();
 
     // lookup database index by name (path elem 0)
@@ -135,6 +160,7 @@ fn req_delete(m_state: web::Data<Mutex<ServerState>>, req: HttpRequest, path: we
 fn req_get(m_state: web::Data<Mutex<ServerState>>, req: HttpRequest, path: web::Path<(String,String)>) -> Result<HttpResponse> {
     println!("{:?}", req);
 
+    // lock runtime-live state data
     let state = m_state.lock().unwrap();
 
     // lookup database index by name (path elem 0)
@@ -154,11 +180,44 @@ fn req_get(m_state: web::Data<Mutex<ServerState>>, req: HttpRequest, path: web::
     }
 }
 
+/// GET data item. key in HTTP payload, value in HTTP payload.
+fn req_get_pb(m_state: web::Data<Mutex<ServerState>>, req: HttpRequest,
+           (path,body): (web::Path<(String,)>,web::Bytes)) -> Result<HttpResponse> {
+    println!("{:?}", req);
+
+    // decode protobuf msg containing key, into GetRequest struct
+    let in_msg: GetRequest;
+    match parse_from_bytes::<GetRequest>(&body) {
+        Err(_e) => return err_bad_req(),
+        Ok(req) => { in_msg = req; }
+    }
+
+    // lock runtime-live state data
+    let state = m_state.lock().unwrap();
+
+    // lookup database index by name (path elem 0)
+    let idx: usize;
+    match state.name_idx.get(&path.0) {
+        None => return err_not_found(),
+        Some(r_idx) => idx = *r_idx
+    }
+
+    // attempt to read record from db, based on key (http payload)
+    match state.dbs[idx].db.get(in_msg.get_key()) {
+        Ok(optval) => match optval {
+            Some(val) => ok_binary(val.to_vec()),
+            None => err_not_found()     // db: value not found
+        },
+        Err(_e) => err_500()            // db: error
+    }
+}
+
 /// PUT data item. key in URI path, value in HTTP payload.
 fn req_put(m_state: web::Data<Mutex<ServerState>>, req: HttpRequest,
            (path,body): (web::Path<(String,String)>,web::Bytes)) -> Result<HttpResponse> {
     println!("{:?}", req);
 
+    // lock runtime-live state data
     let state = m_state.lock().unwrap();
 
     // lookup database index by name (path elem 0)
@@ -261,7 +320,11 @@ fn main() -> io::Result<()> {
             // register our routes
             .service(req_index)
             .service(
-                web::resource("/api/{db}/{key}")
+                web::resource("/api/{db}/get")
+                    .route(web::post().to(req_get_pb))
+            )
+            .service(
+                web::resource("/api/{db}/obj/{key}")
                     .route(web::get().to(req_get))
                     .route(web::put().to(req_put))
                     .route(web::delete().to(req_delete))
