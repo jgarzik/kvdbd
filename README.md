@@ -18,6 +18,16 @@ A REST/JSON API web service, that enables querying key/value databases
 over a network.  In effect, creating a database server for databases
 that have no server.
 
+### Goals
+
+* Written in safe rust
+* Can be queried by stock HTTP clients
+* Modern HTTP service with threads, HTTP/2 etc.
+* Beyond Get/Put/Delete, expose db-specific operations such as transactions or batch-update.
+* Access multiple databases simultaneously from a single HTTP endpoint.
+* Support multiple database back-ends (sled, leveldb, lmdb, gdbm, ...) (TODO)
+* [Zero configuration mode](https://github.com/jgarzik/kvdbd/issues/7) (TODO)
+
 ## Requirements
 
 * Rust 2018+
