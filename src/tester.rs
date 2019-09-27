@@ -18,12 +18,10 @@ use reqwest::{Client,StatusCode};
 use protos::pbapi::{GetRequest};
 use protobuf::{Message};
 
-fn post_get_put_get(db_id: String) {
+fn post_get_put_get(client: &Client, db_id: String) {
     let basepath = format!("{}{}/{}/", T_ENDPOINT, T_BASEURI, db_id);
     let test_key = String::from("1");
     let test_value = format!("helloworld {}", db_id);
-
-    let client = Client::new();
 
     // Check that a record with key 1 doesn't exist.
     let url = format!("{}obj/{}", basepath, test_key);
@@ -109,9 +107,14 @@ fn post_get_put_get(db_id: String) {
 }
 
 fn main() {
+
+    // create http client
+    let client = Client::new();
+
+    // test, for each database
     for n in 1..3 {
         let db_id = format!("db{}", n);
-        post_get_put_get(db_id);
+        post_get_put_get(&client, db_id);
     }
     println!("Integration testing successful.");
 }
