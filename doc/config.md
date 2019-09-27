@@ -27,6 +27,7 @@ each database.
   name.
 * **path**:  Local filesystem path to sled db directory.
 * **driver**:  Database driver used to load/store data. Only valid value: "sled"
+* **read_only**:  True/false:  Open database in read-only mode?
 
 ### Section: Misc. features
 

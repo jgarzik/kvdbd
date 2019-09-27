@@ -30,7 +30,8 @@ use protobuf::{parse_from_bytes};
 struct DbConfig {
     name:   String,
     path:   String,
-    driver: String
+    driver: String,
+    read_only: bool
 }
 
 // top-level schema for server configuration file
@@ -291,6 +292,7 @@ fn main() -> io::Result<()> {
         let db_config = ConfigBuilder::new()
             .path(db_cfg.path.clone())
             .use_compression(false)
+            .read_only(db_cfg.read_only)
             .build();
 
         if db_cfg.driver != "sled".to_string() {

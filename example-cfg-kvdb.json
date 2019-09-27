@@ -1,15 +1,17 @@
 {
-	"debug": true,
+	"debug": false,
 	"databases": [
 		{
 			"name": "db1",
 			"path": "db1.kv",
-			"driver": "sled"
+			"driver": "sled",
+			"read_only": false
 		},
 		{
 			"name": "db2",
 			"path": "db2.kv",
-			"driver": "sled"
+			"driver": "sled",
+			"read_only": false
 		}
 	]
 }
