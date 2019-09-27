@@ -37,12 +37,27 @@ Returns JSON describing service:
 }
 ```
 
+## API: BATCH-UPDATE (atomic update of many records)
+
+Meta-request: POST http://$HOSTNAME:$PORT/api/$DB/batch
+
+Encode the keys/values/ into a protobuf-encoded
+data structure, and POST the data to /api/$DB/batch path:
+```
+curl -X POST --data-binary @postdata http://localhost:8080/api/db/batch
+```
+
+Returns JSON indicating success:
+```
+{"result":true}
+```
+
 ## API: GET (lookup value by binary key)
 
 Meta-request: POST http://$HOSTNAME:$PORT/api/$DB/get
 
-Encode the key, and hash of the key, into a protobuf-encoded
-data structure, and POST the data to /api/$DB/key path:
+Encode the key into a protobuf-encoded
+data structure, and POST the data to /api/$DB/get path:
 ```
 curl -X POST --data-binary @postdata http://localhost:8080/api/db/get
 ```
@@ -81,6 +96,36 @@ curl --data-binary 25 -X PUT http://localhost:8080/api/db/obj/age
 ```
 
 Returns JSON indicating success:
+```
+{"result":true}
+```
+
+## API: PUT (store binary key and value)
+
+Meta-request: POST http://$HOSTNAME:$PORT/api/$DB/put
+
+Encode the key and value into a protobuf-encoded
+data structure, and POST the data to /api/$DB/put path:
+```
+curl -X POST --data-binary @postdata http://localhost:8080/api/db/put
+```
+
+Returns JSON indicating success:
+```
+{"result":true}
+```
+
+## API: DELETE (remove record, based on binary key)
+
+Meta-request: POST http://$HOSTNAME:$PORT/api/$DB/del
+
+Encode the key into a protobuf-encoded
+data structure, and POST the data to /api/$DB/del path:
+```
+curl -X POST --data-binary @postdata http://localhost:8080/api/db/del
+```
+
+Returns JSON describing value found and removed (if in db):
 ```
 {"result":true}
 ```
