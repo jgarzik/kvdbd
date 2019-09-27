@@ -6,11 +6,13 @@ Turn legacy, flat-file databases into micro-services.
 
 ## Table of Contents
 
+* [Table of Contents](#table-of-contents)
 * [Motivation](#motivation)
-* [Requirements](#requirements)
+    * [Goals](#goals)
 * [Documentation](#documentation)
 * [Using kvdbd](#using-kvdbd)
 * [Testing](#testing)
+* [Other projects](#other-projects)
 
 ## Motivation
 
@@ -28,13 +30,9 @@ that have no server.
 * Support multiple database back-ends (sled, leveldb, lmdb, gdbm, ...) (TODO)
 * [Zero configuration mode](https://github.com/jgarzik/kvdbd/issues/7) (TODO)
 
-## Requirements
-
-* Rust 2018+
-* `protoc` protobufs compiler
-
 ## Documentation
 
+* Requirements: Rust 2018+ and `protoc` compiler.
 * Quick Start: see below
 * Configuration:  [config.md](doc/config.md)
 * Remote HTTP API:  [api.md](doc/api.md)
