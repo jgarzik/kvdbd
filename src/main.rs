@@ -135,7 +135,7 @@ fn req_index(m_state: web::Data<Mutex<ServerState>>, req: HttpRequest) -> Result
     ok_json(jv)
 }
 
-/// DELETE data item. key in HTTP payload
+/// DELETE data item. key in HTTP payload.  return ok as json response
 fn req_del(m_state: web::Data<Mutex<ServerState>>, req: HttpRequest,
            (path,body): (web::Path<(String,)>,web::Bytes)) -> Result<HttpResponse> {
 
@@ -167,7 +167,7 @@ fn req_del(m_state: web::Data<Mutex<ServerState>>, req: HttpRequest,
     }
 }
 
-/// DELETE data item.  key in URI path.  returned ok as json response
+/// DELETE data item.  key in URI path.  return ok as json response
 fn req_obj_delete(m_state: web::Data<Mutex<ServerState>>, req: HttpRequest, path: web::Path<(String,String)>) -> Result<HttpResponse> {
 
     // lock runtime-live state data
@@ -191,7 +191,7 @@ fn req_obj_delete(m_state: web::Data<Mutex<ServerState>>, req: HttpRequest, path
     }
 }
 
-/// GET data item. key in URI path, value in HTTP payload.
+/// GET data item. key in URI path, returns value in HTTP payload.
 fn req_obj_get(m_state: web::Data<Mutex<ServerState>>, req: HttpRequest, path: web::Path<(String,String)>) -> Result<HttpResponse> {
 
     // lock runtime-live state data
@@ -215,7 +215,7 @@ fn req_obj_get(m_state: web::Data<Mutex<ServerState>>, req: HttpRequest, path: w
     }
 }
 
-/// GET data item. key in HTTP payload
+/// GET data item. key in HTTP payload, returns value in HTTP payload.
 fn req_get(m_state: web::Data<Mutex<ServerState>>, req: HttpRequest,
            (path,body): (web::Path<(String,)>,web::Bytes)) -> Result<HttpResponse> {
 
@@ -247,7 +247,7 @@ fn req_get(m_state: web::Data<Mutex<ServerState>>, req: HttpRequest,
     }
 }
 
-/// PUT multiple data items. protobuf-encoded key/value pairs in HTTP payload.
+/// atomic PUT of multiple data items. data items in HTTP payload. ret json ok.
 fn req_batch(m_state: web::Data<Mutex<ServerState>>, req: HttpRequest,
            (path,body): (web::Path<(String,)>,web::Bytes)) -> Result<HttpResponse> {
 
