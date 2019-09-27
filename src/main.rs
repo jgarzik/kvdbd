@@ -3,9 +3,9 @@
 extern crate clap;
 mod protos;
 
-const APPNAME: &'static str = "kvdb";
+const APPNAME: &'static str = "kvdbd";
 const VERSION: &'static str = env!("CARGO_PKG_VERSION");
-const DEF_CFG_FN: &'static str = "cfg-kvdb.json";
+const DEF_CFG_FN: &'static str = "cfg-kvdbd.json";
 const DEF_BIND_ADDR: &'static str = "127.0.0.1";
 const DEF_BIND_PORT: &'static str = "8080";
 

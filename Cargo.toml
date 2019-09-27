@@ -1,5 +1,5 @@
 [package]
-name = "kvdb"
+name = "kvdbd"
 version = "0.3.1"
 authors = ["jgarzik"]
 edition = "2018"
@@ -27,7 +27,7 @@ protobuf = "2"
 protoc-rust = "2.0"
 
 [[bin]]
-name = "kvdb"
+name = "kvdbd"
 path = "src/main.rs"
 
 [[bin]]

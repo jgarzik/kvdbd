@@ -1,9 +1,9 @@
 
 /*
- * tester: Integration tester for kvdb
+ * tester: Integration tester for kvdbd
  *
- * To be run separately from kvdb, assuming a clean and empty db:
- * $ cargo run --bin kvdb
+ * To be run separately from kvdbd, assuming a clean and empty db:
+ * $ cargo run --bin kvdbd
  * $ cargo run --bin tester
  */
 

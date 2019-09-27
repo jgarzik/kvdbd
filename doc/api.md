@@ -36,7 +36,7 @@ Returns JSON describing service:
          "driver" : "sled"
       }
    ],
-   "name" : "kvdb",
+   "name" : "kvdbd",
    "version" : "0.2.0"
 }
 ```

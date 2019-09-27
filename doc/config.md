@@ -13,7 +13,7 @@ options are also available.
 
 ## Configuration file
 
-See `example-cfg-kvdb.json` for an example configuration file.
+See `example-cfg-kvdbd.json` for an example configuration file.
 
 ### Section: databases
 
@@ -39,6 +39,6 @@ Also, limited options are available at the command line.  Run `--help`
 to view available options:
 
 ```
-$ cargo run --bin kvdb -- --help
+$ cargo run --bin kvdbd -- --help
 ```
 
