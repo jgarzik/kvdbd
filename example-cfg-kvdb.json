@@ -1,12 +1,15 @@
 {
+	"debug": true,
 	"databases": [
 		{
 			"name": "db1",
-			"path": "db1.kv"
+			"path": "db1.kv",
+			"driver": "sled"
 		},
 		{
 			"name": "db2",
-			"path": "db2.kv"
+			"path": "db2.kv",
+			"driver": "sled"
 		}
 	]
 }

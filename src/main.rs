@@ -36,6 +36,7 @@ struct DbConfig {
 // top-level schema for server configuration file
 #[derive(Serialize, Deserialize)]
 struct ServerConfig {
+    debug:      bool,
     databases:  Vec<DbConfig>
 }
 
@@ -57,6 +58,7 @@ struct DbState {
 // runtime server state info
 #[derive(Clone)]
 struct ServerState {
+    debug: bool,
     name_idx: HashMap<String,usize>,
     dbs: Vec<DbState>   // all open databases
 }
@@ -108,7 +110,6 @@ fn ok_json(jval: serde_json::Value) -> Result<HttpResponse> {
 /// simple root index handler, describes our service
 #[get("/")]
 fn req_index(m_state: web::Data<Mutex<ServerState>>, req: HttpRequest) -> Result<HttpResponse> {
-    println!("{:?}", req);
 
     // fill basic server info struct used for output
     let mut srv_info = ServerInfo {
@@ -119,6 +120,7 @@ fn req_index(m_state: web::Data<Mutex<ServerState>>, req: HttpRequest) -> Result
 
     // lock runtime-live state data
     let state = m_state.lock().unwrap();
+    if state.debug { println!("{:?}", req); }
 
     // copy each db config into output struct
     for db_state in &state.dbs {
@@ -134,10 +136,10 @@ fn req_index(m_state: web::Data<Mutex<ServerState>>, req: HttpRequest) -> Result
 
 /// DELETE data item.  key in URI path.  returned ok as json response
 fn req_delete(m_state: web::Data<Mutex<ServerState>>, req: HttpRequest, path: web::Path<(String,String)>) -> Result<HttpResponse> {
-    println!("{:?}", req);
 
     // lock runtime-live state data
     let state = m_state.lock().unwrap();
+    if state.debug { println!("{:?}", req); }
 
     // lookup database index by name (path elem 0)
     let idx: usize;
@@ -158,10 +160,10 @@ fn req_delete(m_state: web::Data<Mutex<ServerState>>, req: HttpRequest, path: we
 
 /// GET data item. key in URI path, value in HTTP payload.
 fn req_get(m_state: web::Data<Mutex<ServerState>>, req: HttpRequest, path: web::Path<(String,String)>) -> Result<HttpResponse> {
-    println!("{:?}", req);
 
     // lock runtime-live state data
     let state = m_state.lock().unwrap();
+    if state.debug { println!("{:?}", req); }
 
     // lookup database index by name (path elem 0)
     let idx: usize;
@@ -183,7 +185,6 @@ fn req_get(m_state: web::Data<Mutex<ServerState>>, req: HttpRequest, path: web::
 /// GET data item. key in HTTP payload, value in HTTP payload.
 fn req_get_pb(m_state: web::Data<Mutex<ServerState>>, req: HttpRequest,
            (path,body): (web::Path<(String,)>,web::Bytes)) -> Result<HttpResponse> {
-    println!("{:?}", req);
 
     // decode protobuf msg containing key, into GetRequest struct
     let in_msg: GetRequest;
@@ -194,6 +195,7 @@ fn req_get_pb(m_state: web::Data<Mutex<ServerState>>, req: HttpRequest,
 
     // lock runtime-live state data
     let state = m_state.lock().unwrap();
+    if state.debug { println!("{:?}", req); }
 
     // lookup database index by name (path elem 0)
     let idx: usize;
@@ -215,10 +217,10 @@ fn req_get_pb(m_state: web::Data<Mutex<ServerState>>, req: HttpRequest,
 /// PUT data item. key in URI path, value in HTTP payload.
 fn req_put(m_state: web::Data<Mutex<ServerState>>, req: HttpRequest,
            (path,body): (web::Path<(String,String)>,web::Bytes)) -> Result<HttpResponse> {
-    println!("{:?}", req);
 
     // lock runtime-live state data
     let state = m_state.lock().unwrap();
+    if state.debug { println!("{:?}", req); }
 
     // lookup database index by name (path elem 0)
     let idx: usize;
@@ -279,6 +281,7 @@ fn main() -> io::Result<()> {
 
     // init server state
     let mut srv_state = ServerState {
+        debug: server_cfg.debug,
         name_idx: HashMap::new(),
         dbs: Vec::new()
     };

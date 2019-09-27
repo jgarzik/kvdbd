@@ -57,6 +57,11 @@ each database.
 * **name**:  Short URI-compatible name, exposed via API at database
   name.
 * **path**:  Local filesystem path to sled db directory.
+* **driver**:  Database driver used to load/store data. Only valid value: "sled"
+
+#### Misc. features section
+
+* **debug**:  Boolean.  true, to enable additional per-request debug output.
 
 ### Command line help
 
