@@ -6,7 +6,6 @@ Turn legacy, flat-file databases into micro-services.
 
 ## Table of Contents
 
-* [Table of Contents](#table-of-contents)
 * [Motivation](#motivation)
     * [Goals](#goals)
 * [Documentation](#documentation)
@@ -54,6 +53,8 @@ $ cargo run --bin tester
 ```
 
 ## Other projects
+
+Unrelated projects with similar names:
 
 * Another "kvdb" exists as a Go library: https://github.com/portworx/kvdb
 * An online cloud service https://kvdb.io/
