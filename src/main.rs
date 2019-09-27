@@ -20,9 +20,9 @@ use actix_web::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use sled::{Db,ConfigBuilder};
+use sled::{Db,ConfigBuilder,Batch};
 
-use protos::pbapi::{GetRequest};
+use protos::pbapi::{KeyRequest,BatchRequest,UpdateRequest};
 use protobuf::{parse_from_bytes};
 
 // struct used for both input (server config file) and output (server info)
@@ -135,6 +135,38 @@ fn req_index(m_state: web::Data<Mutex<ServerState>>, req: HttpRequest) -> Result
     ok_json(jv)
 }
 
+/// DELETE data item. key in HTTP payload
+fn req_del(m_state: web::Data<Mutex<ServerState>>, req: HttpRequest,
+           (path,body): (web::Path<(String,)>,web::Bytes)) -> Result<HttpResponse> {
+
+    // decode protobuf msg containing key, into KeyRequest struct
+    let in_msg: KeyRequest;
+    match parse_from_bytes::<KeyRequest>(&body) {
+        Err(_e) => return err_bad_req(),
+        Ok(req) => { in_msg = req; }
+    }
+
+    // lock runtime-live state data
+    let state = m_state.lock().unwrap();
+    if state.debug { println!("{:?}", req); }
+
+    // lookup database index by name (path elem 0)
+    let idx: usize;
+    match state.name_idx.get(&path.0) {
+        None => return err_not_found(),
+        Some(r_idx) => idx = *r_idx
+    }
+
+    // attempt to remove record from db, based on key (path elem 1)
+    match state.dbs[idx].db.remove(in_msg.get_key()) {
+        Ok(optval) => match optval {
+            Some(_val) => ok_json(json!({"result": true})),
+            None => err_not_found()     // db: value not found
+        },
+        Err(_e) => err_500()            // db: error
+    }
+}
+
 /// DELETE data item.  key in URI path.  returned ok as json response
 fn req_obj_delete(m_state: web::Data<Mutex<ServerState>>, req: HttpRequest, path: web::Path<(String,String)>) -> Result<HttpResponse> {
 
@@ -183,13 +215,13 @@ fn req_obj_get(m_state: web::Data<Mutex<ServerState>>, req: HttpRequest, path: w
     }
 }
 
-/// GET data item. key in HTTP payload, value in HTTP payload.
+/// GET data item. key in HTTP payload
 fn req_get(m_state: web::Data<Mutex<ServerState>>, req: HttpRequest,
            (path,body): (web::Path<(String,)>,web::Bytes)) -> Result<HttpResponse> {
 
-    // decode protobuf msg containing key, into GetRequest struct
-    let in_msg: GetRequest;
-    match parse_from_bytes::<GetRequest>(&body) {
+    // decode protobuf msg containing key, into KeyRequest struct
+    let in_msg: KeyRequest;
+    match parse_from_bytes::<KeyRequest>(&body) {
         Err(_e) => return err_bad_req(),
         Ok(req) => { in_msg = req; }
     }
@@ -215,6 +247,46 @@ fn req_get(m_state: web::Data<Mutex<ServerState>>, req: HttpRequest,
     }
 }
 
+/// PUT multiple data items. protobuf-encoded key/value pairs in HTTP payload.
+fn req_batch(m_state: web::Data<Mutex<ServerState>>, req: HttpRequest,
+           (path,body): (web::Path<(String,)>,web::Bytes)) -> Result<HttpResponse> {
+
+    // decode protobuf msg containing key/value pairs
+    let in_msg: BatchRequest;
+    match parse_from_bytes::<BatchRequest>(&body) {
+        Err(_e) => return err_bad_req(),
+        Ok(req) => { in_msg = req; }
+    }
+
+    // build sled batch
+    let mut batch = Batch::default();
+    let updates = in_msg.reqs.to_vec();
+    for update in &updates {
+        if update.is_insert {
+            batch.insert(update.key.clone(), update.value.clone());
+        } else {
+            batch.remove(update.key.clone());
+        }
+    }
+
+    // lock runtime-live state data
+    let state = m_state.lock().unwrap();
+    if state.debug { println!("{:?}", req); }
+
+    // lookup database index by name (path elem 0)
+    let idx: usize;
+    match state.name_idx.get(&path.0) {
+        None => return err_not_found(),
+        Some(r_idx) => idx = *r_idx
+    }
+
+    // attempt to store record in db, based on key (path elem 1)
+    match state.dbs[idx].db.apply_batch(batch) {
+        Ok(_optval) => ok_json(json!({"result": true})),
+        Err(_e) => err_500()            // db: error
+    }
+}
+
 /// PUT data item. key in URI path, value in HTTP payload.
 fn req_obj_put(m_state: web::Data<Mutex<ServerState>>, req: HttpRequest,
            (path,body): (web::Path<(String,String)>,web::Bytes)) -> Result<HttpResponse> {
@@ -232,6 +304,36 @@ fn req_obj_put(m_state: web::Data<Mutex<ServerState>>, req: HttpRequest,
 
     // attempt to store record in db, based on key (path elem 1)
     match state.dbs[idx].db.insert(path.1.as_str(), body.to_vec()) {
+        Ok(_optval) => ok_json(json!({"result": true})),
+        Err(_e) => err_500()            // db: error
+    }
+}
+
+/// PUT data item. key/value in HTTP payload.
+fn req_put(m_state: web::Data<Mutex<ServerState>>, req: HttpRequest,
+           (path,body): (web::Path<(String,)>,web::Bytes)) -> Result<HttpResponse> {
+
+    // decode protobuf msg containing key, into KeyRequest struct
+    let in_msg: UpdateRequest;
+    match parse_from_bytes::<UpdateRequest>(&body) {
+        Err(_e) => return err_bad_req(),
+        Ok(req) => { in_msg = req; }
+    }
+    if !in_msg.is_insert { return err_bad_req(); }
+
+    // lock runtime-live state data
+    let state = m_state.lock().unwrap();
+    if state.debug { println!("{:?}", req); }
+
+    // lookup database index by name (path elem 0)
+    let idx: usize;
+    match state.name_idx.get(&path.0) {
+        None => return err_not_found(),
+        Some(r_idx) => idx = *r_idx
+    }
+
+    // attempt to store record in db, based on key
+    match state.dbs[idx].db.insert(in_msg.key, in_msg.value) {
         Ok(_optval) => ok_json(json!({"result": true})),
         Err(_e) => err_500()            // db: error
     }
@@ -325,6 +427,14 @@ fn main() -> io::Result<()> {
             // register our routes
             .service(req_index)
             .service(
+                web::resource("/api/{db}/batch")
+                    .route(web::post().to(req_batch))
+            )
+            .service(
+                web::resource("/api/{db}/del")
+                    .route(web::post().to(req_del))
+            )
+            .service(
                 web::resource("/api/{db}/get")
                     .route(web::post().to(req_get))
             )
@@ -333,6 +443,10 @@ fn main() -> io::Result<()> {
                     .route(web::get().to(req_obj_get))
                     .route(web::put().to(req_obj_put))
                     .route(web::delete().to(req_obj_delete))
+            )
+            .service(
+                web::resource("/api/{db}/put")
+                    .route(web::post().to(req_put))
             )
 
             // default

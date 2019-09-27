@@ -1,6 +1,16 @@
 syntax = "proto3";
 
-message GetRequest {
-  bytes key = 1;
+message KeyRequest {
+  bytes key = 1;	// record key
+}
+
+message UpdateRequest {
+  bytes key = 1;	// record key
+  bytes value = 2;	// record value, or empty, if !is_insert
+  bool is_insert = 3;	// insert(true) or remove(false)
+}
+
+message BatchRequest {
+  repeated UpdateRequest reqs = 1; // list of insert/remove operations
 }
 

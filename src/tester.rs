@@ -15,8 +15,229 @@ const T_BASEURI: &'static str = "/api";
 
 use reqwest::{Client,StatusCode};
 
-use protos::pbapi::{GetRequest};
+use protos::pbapi::{KeyRequest,UpdateRequest,BatchRequest};
 use protobuf::{Message};
+
+fn t_key_gone(client: &Client, db_id: String, key: String) {
+    let basepath = format!("{}{}/{}/", T_ENDPOINT, T_BASEURI, db_id);
+    let get_url = format!("{}get", basepath);
+
+    // encode verification get request
+    let mut out_msg = KeyRequest::new();
+    out_msg.set_key(key.as_bytes().to_vec());
+    let out_bytes: Vec<u8> = out_msg.write_to_bytes().unwrap();
+
+    // exec get request; key1 should not exist, following batch
+    let resp_res = client.post(&get_url)
+        .body(out_bytes)
+        .send();
+    match resp_res {
+        Ok(resp) => assert_eq!(resp.status(), StatusCode::NOT_FOUND),
+        Err(_e) => assert!(false)
+    }
+}
+
+fn t_key_ok(client: &Client, db_id: String, key: String, value: String) {
+    let basepath = format!("{}{}/{}/", T_ENDPOINT, T_BASEURI, db_id);
+    let get_url = format!("{}get", basepath);
+
+    // encode verification get request
+    let mut out_msg = KeyRequest::new();
+    out_msg.set_key(key.as_bytes().to_vec());
+    let out_bytes: Vec<u8> = out_msg.write_to_bytes().unwrap();
+
+    // exec get request; key1 should not exist, following batch
+    let resp_res = client.post(&get_url)
+        .body(out_bytes.clone())
+        .send();
+    match resp_res {
+        Ok(mut resp) => {
+            assert_eq!(resp.status(), StatusCode::OK);
+
+            match resp.text() {
+                Ok(body) => assert_eq!(body, value),
+                Err(_e) => assert!(false)
+            }
+        }
+        Err(_e) => assert!(false)
+    }
+}
+
+fn t_put(client: &Client, db_id: String, key: String, value: String) {
+    let basepath = format!("{}{}/{}/", T_ENDPOINT, T_BASEURI, db_id);
+    let put_url = format!("{}put", basepath);
+
+    // encode put request
+    let mut out_msg = UpdateRequest::new();
+    out_msg.set_key(key.as_bytes().to_vec());
+    out_msg.set_value(value.as_bytes().to_vec());
+    out_msg.set_is_insert(true);
+    let out_bytes: Vec<u8> = out_msg.write_to_bytes().unwrap();
+
+    // exec put request
+    let resp_res = client.post(&put_url)
+        .body(out_bytes)
+        .send();
+    match resp_res {
+        Ok(mut resp) => {
+            assert_eq!(resp.status(), StatusCode::OK);
+
+            match resp.text() {
+                Ok(_body) => {}
+                Err(_e) => assert!(false)
+            }
+        }
+        Err(_e) => assert!(false)
+    }
+}
+
+fn t_del(client: &Client, db_id: String, key: String) {
+    let basepath = format!("{}{}/{}/", T_ENDPOINT, T_BASEURI, db_id);
+    let del_url = format!("{}del", basepath);
+
+    // encode del request
+    let mut out_msg = KeyRequest::new();
+    out_msg.set_key(key.as_bytes().to_vec());
+    let out_bytes: Vec<u8> = out_msg.write_to_bytes().unwrap();
+
+    // exec del request
+    let resp_res = client.post(&del_url)
+        .body(out_bytes)
+        .send();
+    match resp_res {
+        Ok(mut resp) => {
+            assert_eq!(resp.status(), StatusCode::OK);
+
+            match resp.text() {
+                Ok(_body) => {}
+                Err(_e) => assert!(false)
+            }
+        }
+        Err(_e) => assert!(false)
+    }
+}
+
+fn op_batch(client: &Client, db_id: String) {
+    let basepath = format!("{}{}/{}/", T_ENDPOINT, T_BASEURI, db_id);
+    let batch_url = format!("{}batch", basepath);
+    let test_key = String::from("op_batch_key1");
+    let test_value = format!("helloworld op_put {}", db_id);
+
+    t_put(client, db_id.clone(), test_key.clone(), test_value);
+
+    let mut out_msg = BatchRequest::new();
+
+    // op1: delete
+    let mut req = UpdateRequest::new();
+    req.set_key("op_batch_key1".as_bytes().to_vec());
+    req.set_is_insert(false);
+    out_msg.reqs.push(req);
+
+    // op2: insert
+    let mut req = UpdateRequest::new();
+    req.set_key("op_batch_key2".as_bytes().to_vec());
+    req.set_value("op_batch_value2".as_bytes().to_vec());
+    req.set_is_insert(true);
+    out_msg.reqs.push(req);
+
+    // op3: insert
+    let mut req = UpdateRequest::new();
+    req.set_key("op_batch_key3".as_bytes().to_vec());
+    req.set_value("op_batch_value3".as_bytes().to_vec());
+    req.set_is_insert(true);
+    out_msg.reqs.push(req);
+
+    let out_bytes: Vec<u8> = out_msg.write_to_bytes().unwrap();
+
+    // exec batch request
+    let resp_res = client.post(&batch_url)
+        .body(out_bytes)
+        .send();
+    match resp_res {
+        Ok(mut resp) => {
+            assert_eq!(resp.status(), StatusCode::OK);
+
+            match resp.text() {
+                Ok(_body) => {}
+                Err(_e) => assert!(false)
+            }
+        }
+        Err(_e) => assert!(false)
+    }
+
+    t_key_gone(client, db_id.clone(), test_key.clone());
+    t_key_ok(client, db_id.clone(), String::from("op_batch_key2"),
+             String::from("op_batch_value2"));
+    t_key_ok(client, db_id.clone(), String::from("op_batch_key3"),
+             String::from("op_batch_value3"));
+
+    t_del(client, db_id.clone(), String::from("op_batch_key2"));
+    t_del(client, db_id, String::from("op_batch_key3"));
+}
+
+fn op_pb_get_del_put(client: &Client, db_id: String) {
+    let basepath = format!("{}{}/{}/", T_ENDPOINT, T_BASEURI, db_id);
+    let put_url = format!("{}put", basepath);
+    let get_url = format!("{}get", basepath);
+    let del_url = format!("{}del", basepath);
+    let test_key = String::from("op_put_key");
+    let test_value = format!("helloworld op_put {}", db_id);
+
+    // encode put request
+    let mut out_msg = UpdateRequest::new();
+    out_msg.set_key(test_key.as_bytes().to_vec());
+    out_msg.set_value(test_value.as_bytes().to_vec());
+    out_msg.set_is_insert(true);
+    let out_bytes: Vec<u8> = out_msg.write_to_bytes().unwrap();
+
+    // exec put request
+    let resp_res = client.post(&put_url)
+        .body(out_bytes)
+        .send();
+    match resp_res {
+        Ok(mut resp) => {
+            assert_eq!(resp.status(), StatusCode::OK);
+
+            match resp.text() {
+                Ok(_body) => {}
+                Err(_e) => assert!(false)
+            }
+        }
+        Err(_e) => assert!(false)
+    }
+
+    // encode verification get request
+    let mut out_msg = KeyRequest::new();
+    out_msg.set_key(test_key.as_bytes().to_vec());
+    let out_bytes: Vec<u8> = out_msg.write_to_bytes().unwrap();
+
+    // exec get request
+    let resp_res = client.post(&get_url)
+        .body(out_bytes.clone())
+        .send();
+    match resp_res {
+        Ok(mut resp) => {
+            assert_eq!(resp.status(), StatusCode::OK);
+
+            match resp.text() {
+                Ok(body) => assert_eq!(body, test_value),
+                Err(_e) => assert!(false)
+            }
+        }
+        Err(_e) => assert!(false)
+    }
+
+    // re-use same KeyRequest bytes for our delete request
+
+    // exec del request
+    let resp_res = client.post(&del_url)
+        .body(out_bytes)
+        .send();
+    match resp_res {
+        Ok(resp) => assert_eq!(resp.status(), StatusCode::OK),
+        Err(_e) => assert!(false)
+    }
+}
 
 fn post_get_put_get(client: &Client, db_id: String) {
     let basepath = format!("{}{}/{}/", T_ENDPOINT, T_BASEURI, db_id);
@@ -63,7 +284,7 @@ fn post_get_put_get(client: &Client, db_id: String) {
 
     // Check that the record exists with the correct contents,
     // protobuf-style.
-    let mut out_msg = GetRequest::new();
+    let mut out_msg = KeyRequest::new();
     out_msg.set_key(test_key.as_bytes().to_vec());
 
     let out_bytes: Vec<u8> = out_msg.write_to_bytes().unwrap();
@@ -114,7 +335,10 @@ fn main() {
     // test, for each database
     for n in 1..3 {
         let db_id = format!("db{}", n);
-        post_get_put_get(&client, db_id);
+
+        op_batch(&client, db_id.clone());
+        post_get_put_get(&client, db_id.clone());
+        op_pb_get_del_put(&client, db_id.clone());
     }
     println!("Integration testing successful.");
 }
