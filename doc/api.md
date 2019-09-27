@@ -5,10 +5,14 @@ Connect to HTTP endpoint using any web client.
 
 ## Table of Contents
 
+* [Table of Contents](#table-of-contents)
 * [API: Service identity and status](#api-service-identity-and-status)
+* [API: BATCH-UPDATE (atomic update of many records)](#api-batch-update-atomic-update-of-many-records)
 * [API: GET (lookup value by binary key)](#api-get-lookup-value-by-binary-key)
 * [API: GET (lookup value by key)](#api-get-lookup-value-by-key)
 * [API: PUT (store key and value)](#api-put-store-key-and-value)
+* [API: PUT (store binary key and value)](#api-put-store-binary-key-and-value)
+* [API: DELETE (remove record, based on binary key)](#api-delete-remove-record-based-on-binary-key)
 * [API: DELETE (remove record, based on key)](#api-delete-remove-record-based-on-key)
 
 ## API: Service identity and status
