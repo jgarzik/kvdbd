@@ -8,20 +8,25 @@
  */
 
 extern crate reqwest;
+mod protos;
 
 const T_ENDPOINT: &'static str = "http://127.0.0.1:8080";
 const T_BASEURI: &'static str = "/api";
 
 use reqwest::{Client,StatusCode};
 
+use protos::pbapi::{GetRequest};
+use protobuf::{Message};
+
 fn post_get_put_get(db_id: String) {
     let basepath = format!("{}{}/{}/", T_ENDPOINT, T_BASEURI, db_id);
+    let test_key = String::from("1");
     let test_value = format!("helloworld {}", db_id);
 
     let client = Client::new();
 
     // Check that a record with key 1 doesn't exist.
-    let url = format!("{}1", basepath);
+    let url = format!("{}obj/{}", basepath, test_key);
     let resp_res = client.get(&url).send();
     match resp_res {
         Ok(resp) => assert_eq!(resp.status(), StatusCode::NOT_FOUND),
@@ -46,6 +51,29 @@ fn post_get_put_get(db_id: String) {
 
     // Check that the record exists with the correct contents.
     let resp_res = client.get(&url).send();
+    match resp_res {
+        Ok(mut resp) => {
+            assert_eq!(resp.status(), StatusCode::OK);
+
+            match resp.text() {
+                Ok(body) => assert_eq!(body, test_value),
+                Err(_e) => assert!(false)
+            }
+        }
+        Err(_e) => assert!(false)
+    }
+
+    // Check that the record exists with the correct contents,
+    // protobuf-style.
+    let mut out_msg = GetRequest::new();
+    out_msg.set_key(test_key.as_bytes().to_vec());
+
+    let out_bytes: Vec<u8> = out_msg.write_to_bytes().unwrap();
+
+    let get_pb_url = format!("{}get", basepath);
+    let resp_res = client.post(&get_pb_url)
+        .body(out_bytes)
+        .send();
     match resp_res {
         Ok(mut resp) => {
             assert_eq!(resp.status(), StatusCode::OK);
