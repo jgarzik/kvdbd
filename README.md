@@ -16,6 +16,8 @@ A REST/JSON API web service, that enables querying key/value databases
 over a network.  In effect, creating a database server for databases
 that have no server.
 
+Turn legacy, flat-file databases into micro-services.
+
 ## Requirements
 
 * Rust 2018+
