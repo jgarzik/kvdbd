@@ -45,3 +45,7 @@ Integration testing is performed via a separate binary, `tester`.
 $ cargo run --bin tester
 ```
 
+## Other projects
+
+* Another "kvdb" exists as a Go library: https://github.com/portworx/kvdb
+
