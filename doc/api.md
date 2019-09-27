@@ -45,8 +45,8 @@ Returns JSON describing service:
 
 Meta-request: POST http://$HOSTNAME:$PORT/api/$DB/batch
 
-Encode the keys/values/ into a protobuf-encoded
-data structure, and POST the data to /api/$DB/batch path:
+Encode the keys/values/ into protobuf-encoded
+data structure `BatchRequest`, and POST the data to /api/$DB/batch path:
 ```
 curl -X POST --data-binary @postdata http://localhost:8080/api/db/batch
 ```
@@ -60,8 +60,8 @@ Returns JSON indicating success:
 
 Meta-request: POST http://$HOSTNAME:$PORT/api/$DB/get
 
-Encode the key into a protobuf-encoded
-data structure, and POST the data to /api/$DB/get path:
+Encode the key into protobuf-encoded
+data structure `KeyRequest`, and POST the data to /api/$DB/get path:
 ```
 curl -X POST --data-binary @postdata http://localhost:8080/api/db/get
 ```
@@ -108,8 +108,8 @@ Returns JSON indicating success:
 
 Meta-request: POST http://$HOSTNAME:$PORT/api/$DB/put
 
-Encode the key and value into a protobuf-encoded
-data structure, and POST the data to /api/$DB/put path:
+Encode the key and value into protobuf-encoded
+data structure `UpdateRequest`, and POST the data to /api/$DB/put path:
 ```
 curl -X POST --data-binary @postdata http://localhost:8080/api/db/put
 ```
@@ -123,8 +123,8 @@ Returns JSON indicating success:
 
 Meta-request: POST http://$HOSTNAME:$PORT/api/$DB/del
 
-Encode the key into a protobuf-encoded
-data structure, and POST the data to /api/$DB/del path:
+Encode the key into protobuf-encoded
+data structure `KeyRequest`, and POST the data to /api/$DB/del path:
 ```
 curl -X POST --data-binary @postdata http://localhost:8080/api/db/del
 ```
