@@ -18,7 +18,7 @@ use reqwest::{Client,StatusCode};
 use protos::pbapi::{KeyRequest,UpdateRequest,BatchRequest};
 use protobuf::{Message};
 
-fn t_key_gone(client: &Client, db_id: String, key: String) {
+fn t_get_gone(client: &Client, db_id: String, key: String) {
     let basepath = format!("{}{}/{}/", T_ENDPOINT, T_BASEURI, db_id);
     let get_url = format!("{}get", basepath);
 
@@ -37,7 +37,7 @@ fn t_key_gone(client: &Client, db_id: String, key: String) {
     }
 }
 
-fn t_key_ok(client: &Client, db_id: String, key: String, value: String) {
+fn t_get_ok(client: &Client, db_id: String, key: String, value: String) {
     let basepath = format!("{}{}/{}/", T_ENDPOINT, T_BASEURI, db_id);
     let get_url = format!("{}get", basepath);
 
@@ -117,6 +117,32 @@ fn t_del(client: &Client, db_id: String, key: String) {
     }
 }
 
+fn t_del_gone(client: &Client, db_id: String, key: String) {
+    let basepath = format!("{}{}/{}/", T_ENDPOINT, T_BASEURI, db_id);
+    let del_url = format!("{}del", basepath);
+
+    // encode del request
+    let mut out_msg = KeyRequest::new();
+    out_msg.set_key(key.as_bytes().to_vec());
+    let out_bytes: Vec<u8> = out_msg.write_to_bytes().unwrap();
+
+    // exec del request
+    let resp_res = client.post(&del_url)
+        .body(out_bytes)
+        .send();
+    match resp_res {
+        Ok(mut resp) => {
+            assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+
+            match resp.text() {
+                Ok(_body) => {}
+                Err(_e) => assert!(false)
+            }
+        }
+        Err(_e) => assert!(false)
+    }
+}
+
 fn op_batch(client: &Client, db_id: String) {
     let basepath = format!("{}{}/{}/", T_ENDPOINT, T_BASEURI, db_id);
     let batch_url = format!("{}batch", basepath);
@@ -165,17 +191,37 @@ fn op_batch(client: &Client, db_id: String) {
         Err(_e) => assert!(false)
     }
 
-    t_key_gone(client, db_id.clone(), test_key.clone());
-    t_key_ok(client, db_id.clone(), String::from("op_batch_key2"),
+    t_get_gone(client, db_id.clone(), test_key.clone());
+    t_get_ok(client, db_id.clone(), String::from("op_batch_key2"),
              String::from("op_batch_value2"));
-    t_key_ok(client, db_id.clone(), String::from("op_batch_key3"),
+    t_get_ok(client, db_id.clone(), String::from("op_batch_key3"),
              String::from("op_batch_value3"));
 
     t_del(client, db_id.clone(), String::from("op_batch_key2"));
     t_del(client, db_id, String::from("op_batch_key3"));
 }
 
-fn op_pb_get_del_put(client: &Client, db_id: String) {
+fn op_del(client: &Client, db_id: String) {
+    let test_key = String::from("op_del_key1");
+    let test_value = format!("helloworld op_del {}", db_id);
+
+    t_put(client, db_id.clone(), test_key.clone(), test_value);
+    t_del(client, db_id.clone(), test_key.clone());
+    t_del_gone(client, db_id, test_key);
+}
+
+fn op_get(client: &Client, db_id: String) {
+    let test_key = String::from("op_key1");
+    let test_value = format!("helloworld op_get {}", db_id);
+
+    t_get_gone(client, db_id.clone(), test_key.clone());
+    t_put(client, db_id.clone(), test_key.clone(), test_value.clone());
+    t_get_ok(client, db_id.clone(), test_key.clone(), test_value);
+    t_del(client, db_id.clone(), test_key.clone());
+    t_get_gone(client, db_id, test_key);
+}
+
+fn op_put(client: &Client, db_id: String) {
     let basepath = format!("{}{}/{}/", T_ENDPOINT, T_BASEURI, db_id);
     let put_url = format!("{}put", basepath);
     let get_url = format!("{}get", basepath);
@@ -239,7 +285,7 @@ fn op_pb_get_del_put(client: &Client, db_id: String) {
     }
 }
 
-fn post_get_put_get(client: &Client, db_id: String) {
+fn op_obj(client: &Client, db_id: String) {
     let basepath = format!("{}{}/{}/", T_ENDPOINT, T_BASEURI, db_id);
     let test_key = String::from("1");
     let test_value = format!("helloworld {}", db_id);
@@ -337,8 +383,10 @@ fn main() {
         let db_id = format!("db{}", n);
 
         op_batch(&client, db_id.clone());
-        post_get_put_get(&client, db_id.clone());
-        op_pb_get_del_put(&client, db_id.clone());
+        op_del(&client, db_id.clone());
+        op_get(&client, db_id.clone());
+        op_obj(&client, db_id.clone());
+        op_put(&client, db_id.clone());
     }
     println!("Integration testing successful.");
 }
