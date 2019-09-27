@@ -136,7 +136,7 @@ fn req_index(m_state: web::Data<Mutex<ServerState>>, req: HttpRequest) -> Result
 }
 
 /// DELETE data item.  key in URI path.  returned ok as json response
-fn req_delete(m_state: web::Data<Mutex<ServerState>>, req: HttpRequest, path: web::Path<(String,String)>) -> Result<HttpResponse> {
+fn req_obj_delete(m_state: web::Data<Mutex<ServerState>>, req: HttpRequest, path: web::Path<(String,String)>) -> Result<HttpResponse> {
 
     // lock runtime-live state data
     let state = m_state.lock().unwrap();
@@ -160,7 +160,7 @@ fn req_delete(m_state: web::Data<Mutex<ServerState>>, req: HttpRequest, path: we
 }
 
 /// GET data item. key in URI path, value in HTTP payload.
-fn req_get(m_state: web::Data<Mutex<ServerState>>, req: HttpRequest, path: web::Path<(String,String)>) -> Result<HttpResponse> {
+fn req_obj_get(m_state: web::Data<Mutex<ServerState>>, req: HttpRequest, path: web::Path<(String,String)>) -> Result<HttpResponse> {
 
     // lock runtime-live state data
     let state = m_state.lock().unwrap();
@@ -184,7 +184,7 @@ fn req_get(m_state: web::Data<Mutex<ServerState>>, req: HttpRequest, path: web::
 }
 
 /// GET data item. key in HTTP payload, value in HTTP payload.
-fn req_get_pb(m_state: web::Data<Mutex<ServerState>>, req: HttpRequest,
+fn req_get(m_state: web::Data<Mutex<ServerState>>, req: HttpRequest,
            (path,body): (web::Path<(String,)>,web::Bytes)) -> Result<HttpResponse> {
 
     // decode protobuf msg containing key, into GetRequest struct
@@ -216,7 +216,7 @@ fn req_get_pb(m_state: web::Data<Mutex<ServerState>>, req: HttpRequest,
 }
 
 /// PUT data item. key in URI path, value in HTTP payload.
-fn req_put(m_state: web::Data<Mutex<ServerState>>, req: HttpRequest,
+fn req_obj_put(m_state: web::Data<Mutex<ServerState>>, req: HttpRequest,
            (path,body): (web::Path<(String,String)>,web::Bytes)) -> Result<HttpResponse> {
 
     // lock runtime-live state data
@@ -326,13 +326,13 @@ fn main() -> io::Result<()> {
             .service(req_index)
             .service(
                 web::resource("/api/{db}/get")
-                    .route(web::post().to(req_get_pb))
+                    .route(web::post().to(req_get))
             )
             .service(
                 web::resource("/api/{db}/obj/{key}")
-                    .route(web::get().to(req_get))
-                    .route(web::put().to(req_put))
-                    .route(web::delete().to(req_delete))
+                    .route(web::get().to(req_obj_get))
+                    .route(web::put().to(req_obj_put))
+                    .route(web::delete().to(req_obj_delete))
             )
 
             // default
