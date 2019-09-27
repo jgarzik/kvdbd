@@ -1,25 +1,9 @@
 # kvdbd
 
-API service enabling easy remote export of embedded key/value databases.
+Daemon that enables reading/writing of flat-file key/value databases
+available via HTTP REST/JSON API.
 
-Turn legacy, flat-file databases into micro-services.
-
-## Table of Contents
-
-* [Motivation](#motivation)
-    * [Goals](#goals)
-* [Documentation](#documentation)
-* [Using kvdbd](#using-kvdbd)
-* [Testing](#testing)
-* [Other projects](#other-projects)
-
-## Motivation
-
-A REST/JSON API web service, that enables querying key/value databases
-over a network.  In effect, creating a database server for databases
-that have no server.
-
-### Goals
+## Goals
 
 * Written in safe rust
 * Can be queried by stock HTTP clients
