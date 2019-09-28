@@ -30,6 +30,10 @@ name = "kvdbd"
 path = "src/main.rs"
 
 [[bin]]
+name = "kvdb-pb"
+path = "src/kvdb-pb.rs"
+
+[[bin]]
 name = "tester"
 path = "src/tester.rs"
 
