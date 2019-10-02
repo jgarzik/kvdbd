@@ -12,7 +12,7 @@ available via HTTP REST/JSON API.
 * Beyond Get/Put/Delete, expose db-specific operations such as transactions or batch-update.
 * Access multiple databases simultaneously from a single HTTP endpoint.
 * [Support multiple database back-ends](https://github.com/jgarzik/kvdbd/issues/6) (sled, leveldb, lmdb, gdbm, ...) (TODO)
-* [Zero configuration mode](https://github.com/jgarzik/kvdbd/issues/7) (TODO)
+* Docker-friendly Zero configuration mode
 
 ## Documentation
 
