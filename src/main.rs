@@ -64,6 +64,32 @@ struct ServerState {
     dbs: Vec<DbState>   // all open databases
 }
 
+struct Backend {
+    cli_help: String,
+    cli_value_name: String
+}
+
+struct BackendState {
+    backends: HashMap<String,Backend>
+}
+
+fn build_backend(id: &str) -> Backend {
+    let value_str = format!("{}-DB-PATH", id);
+    let help_str = format!("Zeroconf; ignore server config, and create single database 'db' using backend {} with param {}", id, value_str);
+    Backend {
+        cli_help: help_str,
+        cli_value_name: value_str
+    }
+}
+
+fn register_backends() -> BackendState {
+    let mut bs = BackendState { backends: HashMap::new() };
+
+    bs.backends.insert(String::from("sled"), build_backend("sled"));
+
+    return bs;
+}
+
 // helper function, 404 not found
 fn err_not_found() -> Result<HttpResponse> {
     Ok(HttpResponse::build(StatusCode::NOT_FOUND)
@@ -348,8 +374,15 @@ fn main() -> io::Result<()> {
     env::set_var("RUST_LOG", "actix_web=debug");
     env_logger::init();
 
-    // parse command line
-    let cli_matches = clap::App::new(APPNAME)
+    let backend_state = register_backends();
+
+    // build cli help strings
+    let help_config = format!("Sets a custom configuration file (default: {})", DEF_CFG_FN);
+    let help_bind_addr = format!("Custom server socket bind address (default: {})", DEF_BIND_ADDR);
+    let help_bind_port = format!("Custom server socket bind port (default: {})", DEF_BIND_PORT);
+
+    // CLI parser static setup
+    let mut cli_app = clap::App::new(APPNAME)
                       .version(VERSION)
                       .author("Jeff Garzik <jgarzik@pobox.com>")
                       .about("Database server for key/value db")
@@ -357,19 +390,31 @@ fn main() -> io::Result<()> {
                            .short("c")
                            .long("config")
                            .value_name("JSON-FILE")
-                           .help(&format!("Sets a custom configuration file (default: {})", DEF_CFG_FN))
+                           .help(&help_config)
                            .takes_value(true))
                       .arg(clap::Arg::with_name("bind-addr")
                            .long("bind-addr")
                            .value_name("IP-ADDRESS")
-                           .help(&format!("Custom server socket bind address (default: {})", DEF_BIND_ADDR))
+                           .help(&help_bind_addr)
                            .takes_value(true))
                       .arg(clap::Arg::with_name("bind-port")
                            .long("bind-port")
                            .value_name("PORT")
-                           .help(&format!("Custom server socket bind port (default: {})", DEF_BIND_PORT))
-                           .takes_value(true))
-                      .get_matches();
+                           .help(&help_bind_port)
+                           .takes_value(true));
+
+    // CLI parser dynamic setup: add zeroconf database options
+    for (be_name, be_info) in &backend_state.backends {
+        cli_app = cli_app
+                      .arg(clap::Arg::with_name(be_name)
+                           .long(be_name)
+                           .value_name(&be_info.cli_value_name)
+                           .help(&be_info.cli_help)
+                           .takes_value(true));
+    }
+
+    // parse command line
+    let cli_matches = cli_app.get_matches();
 
     // configure based on CLI options
     let bind_addr = cli_matches.value_of("bind-addr").unwrap_or(DEF_BIND_ADDR);
@@ -377,31 +422,58 @@ fn main() -> io::Result<()> {
     let bind_pair = format!("{}:{}", bind_addr, bind_port);
     let server_hdr = format!("{}/{}", APPNAME, VERSION);
 
-    // read JSON configuration file
-    let cfg_fn = cli_matches.value_of("config").unwrap_or(DEF_CFG_FN);
-    let cfg_text = fs::read_to_string(cfg_fn)?;
-    let server_cfg: ServerConfig = serde_json::from_str(&cfg_text)?;
-
     // init server state
     let mut srv_state = ServerState {
-        debug: server_cfg.debug,
+        debug: false,
         name_idx: HashMap::new(),
         dbs: Vec::new()
     };
 
+    // determine if zeroconf is requested
+    let mut zeroconf = false;
+    let mut server_cfg = ServerConfig { debug: false, databases: vec![] };
+    for (be_name, _be_info) in &backend_state.backends {
+
+        // if matched, build single-db static configuration
+        if cli_matches.is_present(be_name) {
+            server_cfg = ServerConfig {
+                debug: false,
+                databases: vec![DbConfig {
+                    name: String::from("db"),
+                    path: cli_matches.value_of(be_name).unwrap().to_string(),
+                    driver: be_name.clone(),
+                    read_only: false
+                }]
+            };
+            zeroconf = true;
+            break;
+        }
+    }
+
+    // read JSON configuration file, unless already configured
+    if !zeroconf {
+        let cfg_fn = cli_matches.value_of("config").unwrap_or(DEF_CFG_FN);
+        let cfg_text = fs::read_to_string(cfg_fn)?;
+        server_cfg = serde_json::from_str(&cfg_text)?;
+    }
+
     // configure and open databases
     for db_cfg in &server_cfg.databases {
+
+        // setup sled backend config
         let db_config = ConfigBuilder::new()
             .path(db_cfg.path.clone())
             .use_compression(false)
             .read_only(db_cfg.read_only)
             .build();
 
-        if db_cfg.driver != "sled".to_string() {
+        // verify this is a known backend
+        if !backend_state.backends.contains_key(&db_cfg.driver) {
             println!("config: Unsupported db driver {} specified.", db_cfg.driver);
             process::exit(1);
         }
 
+        // add db to server state
         let next_idx = srv_state.dbs.len();
         srv_state.name_idx.insert(db_cfg.name.clone(), next_idx);
         srv_state.dbs.push( DbState {
