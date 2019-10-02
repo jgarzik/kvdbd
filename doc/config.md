@@ -6,6 +6,7 @@ options are also available.
 
 ## Table of Contents
 
+* ["zeroconf" mode](#zeroconf-mode)
 * [Configuration file](#configuration-file)
    * [Section: databases](#section-databases)
    * [Section: Misc. features](#section-misc-features)

@@ -5,17 +5,30 @@ Connect to HTTP endpoint using any web client.
 
 ## Table of Contents
 
-* [Table of Contents](#table-of-contents)
-* [API: Service identity and status](#api-service-identity-and-status)
-* [API: BATCH-UPDATE (atomic update of many records)](#api-batch-update-atomic-update-of-many-records)
-* [API: GET (lookup value by binary key)](#api-get-lookup-value-by-binary-key)
-* [API: GET (lookup value by key)](#api-get-lookup-value-by-key)
-* [API: PUT (store key and value)](#api-put-store-key-and-value)
-* [API: PUT (store binary key and value)](#api-put-store-binary-key-and-value)
-* [API: DELETE (remove record, based on binary key)](#api-delete-remove-record-based-on-binary-key)
-* [API: DELETE (remove record, based on key)](#api-delete-remove-record-based-on-key)
+* [HTTP REST API](#http-rest-api)
+   * [API: Service identity and status](#api-service-identity-and-status)
+   * [API: BATCH-UPDATE (atomic update of many records)](#api-batch-update-atomic-update-of-many-records)
+   * [API: GET (lookup value by binary key)](#api-get-lookup-value-by-binary-key)
+   * [API: GET (lookup value by key)](#api-get-lookup-value-by-key)
+   * [API: PUT (store key and value)](#api-put-store-key-and-value)
+   * [API: PUT (store binary key and value)](#api-put-store-binary-key-and-value)
+   * [API: DELETE (remove record, based on binary key)](#api-delete-remove-record-based-on-binary-key)
+   * [API: DELETE (remove record, based on key)](#api-delete-remove-record-based-on-key)
+* [kvdb-pb: Protobuf encoding utility](#kvdb-pb-protobuf-encoding-utility)
 
-## API: Service identity and status
+## HTTP REST API
+
+The following are the operations supported by the HTTP REST API.
+
+Supported base protocol features:
+
+* HTTP 1.1
+* HTTP 2.0
+* REST
+* JSON
+* Protocol buffers (optional)
+
+### API: Service identity and status
 
 ```
 $ curl http://localhost:8080/
@@ -41,7 +54,7 @@ Returns JSON describing service:
 }
 ```
 
-## API: BATCH-UPDATE (atomic update of many records)
+### API: BATCH-UPDATE (atomic update of many records)
 
 Meta-request: POST http://$HOSTNAME:$PORT/api/$DB/batch
 
@@ -56,7 +69,7 @@ Returns JSON indicating success:
 {"result":true}
 ```
 
-## API: GET (lookup value by binary key)
+### API: GET (lookup value by binary key)
 
 Meta-request: POST http://$HOSTNAME:$PORT/api/$DB/get
 
@@ -72,7 +85,7 @@ if present:
 25
 ```
 
-## API: GET (lookup value by key)
+### API: GET (lookup value by key)
 
 Meta-request: GET http://$HOSTNAME:$PORT/api/$DB/obj/$KEY
 
@@ -88,7 +101,7 @@ if present:
 25
 ```
 
-## API: PUT (store key and value)
+### API: PUT (store key and value)
 
 Meta-request: PUT http://$HOSTNAME:$PORT/api/$DB/obj/$KEY
 
@@ -104,7 +117,7 @@ Returns JSON indicating success:
 {"result":true}
 ```
 
-## API: PUT (store binary key and value)
+### API: PUT (store binary key and value)
 
 Meta-request: POST http://$HOSTNAME:$PORT/api/$DB/put
 
@@ -119,7 +132,7 @@ Returns JSON indicating success:
 {"result":true}
 ```
 
-## API: DELETE (remove record, based on binary key)
+### API: DELETE (remove record, based on binary key)
 
 Meta-request: POST http://$HOSTNAME:$PORT/api/$DB/del
 
@@ -134,7 +147,7 @@ Returns JSON describing value found and removed (if in db):
 {"result":true}
 ```
 
-## API: DELETE (remove record, based on key)
+### API: DELETE (remove record, based on key)
 
 Meta-request: DELETE http://$HOSTNAME:$PORT/api/$DB/obj/$KEY
 
@@ -150,3 +163,12 @@ Returns JSON describing value found and removed (if in db):
 {"result":true}
 ```
 
+## kvdb-pb: Protobuf encoding utility
+
+Use this tool to encode get/put protobuf commands, for use
+in conjunction with curl:
+
+```
+$ cargo run --bin kvdb-pb -- --encode --key foo --value bar put > postdata
+$ curl -X POST --data-binary @postdata http://localhost:8080/api/db/put
+```
