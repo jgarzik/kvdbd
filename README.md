@@ -23,11 +23,22 @@ available via HTTP REST/JSON API.
 
 ## Using kvdbd
 
+### From cargo
+
 Standard rust cargo multi-binary setup:
 
 ```
 $ cargo build
 $ cargo run --bin kvdbd
+```
+
+### From docker
+
+Zeroconf docker example, with sled database stored on docker volume `dbdata`:
+```
+$ docker volume create dbdata
+$ docker run --rm -p 8080:8080 -v dbdata:/data jgarzik/kvdbd kvdbd --bind-addr 0.0.0.0 --sled /data/sled.db
+$ curl http://127.0.0.1:8080/ | json_pp
 ```
 
 ## Testing
