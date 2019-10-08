@@ -46,7 +46,7 @@ fn main() -> io::Result<()> {
     env_logger::init();
 
     // parse command line
-    let op_vals = ["get", "put"];
+    let op_vals = ["get", "del", "put"];
     let cli_matches = clap::App::new(APPNAME)
                       .version(VERSION)
                       .about("Wire protocol encode/decode for kvdbd")
@@ -81,7 +81,7 @@ fn main() -> io::Result<()> {
     } else if cli_matches.is_present("encode") {
         let op = cli_matches.value_of("op").unwrap();
 	match op {
-	    "get" => {
+	    "get" | "del" => {
 		if !cli_matches.is_present("key") {
 		    println!("Missing --key");
 		    process::exit(1);
