@@ -1,51 +1,48 @@
-
 pub enum MutationOp {
     Insert,
-    Remove
+    Remove,
 }
 
 pub struct Mutation {
     pub op: MutationOp,
     pub key: Vec<u8>,
-    pub value: Option<Vec<u8>>
+    pub value: Option<Vec<u8>>,
 }
 
 pub struct Batch {
-    pub ops: Vec<Mutation>
+    pub ops: Vec<Mutation>,
 }
 
 impl Batch {
     pub fn default() -> Batch {
-        Batch {
-            ops: Vec::new()
-        }
+        Batch { ops: Vec::new() }
     }
 
     pub fn insert(&mut self, key_in: &[u8], value_in: &[u8]) {
-        self.ops.push(Mutation{
+        self.ops.push(Mutation {
             op: MutationOp::Insert,
-    	    key: key_in.to_vec(),
-    	    value: Some(value_in.to_vec())
+            key: key_in.to_vec(),
+            value: Some(value_in.to_vec()),
         });
     }
 
     pub fn remove(&mut self, key_in: &[u8]) {
-        self.ops.push(Mutation{
+        self.ops.push(Mutation {
             op: MutationOp::Remove,
-    	    key: key_in.to_vec(),
-    	    value: None
+            key: key_in.to_vec(),
+            value: None,
         });
     }
 }
 
 pub struct Config {
     pub path: String,
-    pub read_only: bool
+    pub read_only: bool,
 }
 
 pub struct ConfigBuilder {
     pub path: Option<String>,
-    pub read_only: Option<bool>
+    pub read_only: Option<bool>,
 }
 
 pub trait Db {
@@ -62,8 +59,8 @@ pub trait Driver {
 impl ConfigBuilder {
     pub fn new() -> ConfigBuilder {
         ConfigBuilder {
-       	    path: None,
-    	    read_only: None
+            path: None,
+            read_only: None,
         }
     }
 
@@ -79,15 +76,14 @@ impl ConfigBuilder {
 
     pub fn build(&self) -> Config {
         Config {
-       	    path: match &self.path {
-    	        None => String::from("./db"),
-    	        Some(p) => String::from(p)
-    	    },
-    	    read_only: match &self.read_only {
-    	        None => false,
-    	        Some(v) => *v
-    	    }
+            path: match &self.path {
+                None => String::from("./db"),
+                Some(p) => String::from(p),
+            },
+            read_only: match &self.read_only {
+                None => false,
+                Some(v) => *v,
+            },
         }
     }
 }
-

@@ -1,4 +1,3 @@
-
 /*
  * tester: Integration tester for kvdbd
  *
@@ -13,10 +12,10 @@ mod protos;
 const T_ENDPOINT: &'static str = "http://127.0.0.1:8080";
 const T_BASEURI: &'static str = "/api";
 
-use reqwest::{Client,StatusCode};
+use reqwest::{Client, StatusCode};
 
-use protos::pbapi::{KeyRequest,UpdateRequest,BatchRequest};
-use protobuf::{Message};
+use protobuf::Message;
+use protos::pbapi::{BatchRequest, KeyRequest, UpdateRequest};
 
 fn t_get_gone(client: &Client, db_id: String, key: String) {
     let basepath = format!("{}{}/{}/", T_ENDPOINT, T_BASEURI, db_id);
@@ -28,12 +27,10 @@ fn t_get_gone(client: &Client, db_id: String, key: String) {
     let out_bytes: Vec<u8> = out_msg.write_to_bytes().unwrap();
 
     // exec get request; key1 should not exist, following batch
-    let resp_res = client.post(&get_url)
-        .body(out_bytes)
-        .send();
+    let resp_res = client.post(&get_url).body(out_bytes).send();
     match resp_res {
         Ok(resp) => assert_eq!(resp.status(), StatusCode::NOT_FOUND),
-        Err(_e) => assert!(false)
+        Err(_e) => assert!(false),
     }
 }
 
@@ -47,19 +44,17 @@ fn t_get_ok(client: &Client, db_id: String, key: String, value: String) {
     let out_bytes: Vec<u8> = out_msg.write_to_bytes().unwrap();
 
     // exec get request; key1 should not exist, following batch
-    let resp_res = client.post(&get_url)
-        .body(out_bytes.clone())
-        .send();
+    let resp_res = client.post(&get_url).body(out_bytes.clone()).send();
     match resp_res {
         Ok(mut resp) => {
             assert_eq!(resp.status(), StatusCode::OK);
 
             match resp.text() {
                 Ok(body) => assert_eq!(body, value),
-                Err(_e) => assert!(false)
+                Err(_e) => assert!(false),
             }
         }
-        Err(_e) => assert!(false)
+        Err(_e) => assert!(false),
     }
 }
 
@@ -75,19 +70,17 @@ fn t_put(client: &Client, db_id: String, key: String, value: String) {
     let out_bytes: Vec<u8> = out_msg.write_to_bytes().unwrap();
 
     // exec put request
-    let resp_res = client.post(&put_url)
-        .body(out_bytes)
-        .send();
+    let resp_res = client.post(&put_url).body(out_bytes).send();
     match resp_res {
         Ok(mut resp) => {
             assert_eq!(resp.status(), StatusCode::OK);
 
             match resp.text() {
                 Ok(_body) => {}
-                Err(_e) => assert!(false)
+                Err(_e) => assert!(false),
             }
         }
-        Err(_e) => assert!(false)
+        Err(_e) => assert!(false),
     }
 }
 
@@ -101,19 +94,17 @@ fn t_del(client: &Client, db_id: String, key: String) {
     let out_bytes: Vec<u8> = out_msg.write_to_bytes().unwrap();
 
     // exec del request
-    let resp_res = client.post(&del_url)
-        .body(out_bytes)
-        .send();
+    let resp_res = client.post(&del_url).body(out_bytes).send();
     match resp_res {
         Ok(mut resp) => {
             assert_eq!(resp.status(), StatusCode::OK);
 
             match resp.text() {
                 Ok(_body) => {}
-                Err(_e) => assert!(false)
+                Err(_e) => assert!(false),
             }
         }
-        Err(_e) => assert!(false)
+        Err(_e) => assert!(false),
     }
 }
 
@@ -127,19 +118,17 @@ fn t_del_gone(client: &Client, db_id: String, key: String) {
     let out_bytes: Vec<u8> = out_msg.write_to_bytes().unwrap();
 
     // exec del request
-    let resp_res = client.post(&del_url)
-        .body(out_bytes)
-        .send();
+    let resp_res = client.post(&del_url).body(out_bytes).send();
     match resp_res {
         Ok(mut resp) => {
             assert_eq!(resp.status(), StatusCode::NOT_FOUND);
 
             match resp.text() {
                 Ok(_body) => {}
-                Err(_e) => assert!(false)
+                Err(_e) => assert!(false),
             }
         }
-        Err(_e) => assert!(false)
+        Err(_e) => assert!(false),
     }
 }
 
@@ -176,26 +165,32 @@ fn op_batch(client: &Client, db_id: String) {
     let out_bytes: Vec<u8> = out_msg.write_to_bytes().unwrap();
 
     // exec batch request
-    let resp_res = client.post(&batch_url)
-        .body(out_bytes)
-        .send();
+    let resp_res = client.post(&batch_url).body(out_bytes).send();
     match resp_res {
         Ok(mut resp) => {
             assert_eq!(resp.status(), StatusCode::OK);
 
             match resp.text() {
                 Ok(_body) => {}
-                Err(_e) => assert!(false)
+                Err(_e) => assert!(false),
             }
         }
-        Err(_e) => assert!(false)
+        Err(_e) => assert!(false),
     }
 
     t_get_gone(client, db_id.clone(), test_key.clone());
-    t_get_ok(client, db_id.clone(), String::from("op_batch_key2"),
-             String::from("op_batch_value2"));
-    t_get_ok(client, db_id.clone(), String::from("op_batch_key3"),
-             String::from("op_batch_value3"));
+    t_get_ok(
+        client,
+        db_id.clone(),
+        String::from("op_batch_key2"),
+        String::from("op_batch_value2"),
+    );
+    t_get_ok(
+        client,
+        db_id.clone(),
+        String::from("op_batch_key3"),
+        String::from("op_batch_value3"),
+    );
 
     t_del(client, db_id.clone(), String::from("op_batch_key2"));
     t_del(client, db_id, String::from("op_batch_key3"));
@@ -237,19 +232,17 @@ fn op_put(client: &Client, db_id: String) {
     let out_bytes: Vec<u8> = out_msg.write_to_bytes().unwrap();
 
     // exec put request
-    let resp_res = client.post(&put_url)
-        .body(out_bytes)
-        .send();
+    let resp_res = client.post(&put_url).body(out_bytes).send();
     match resp_res {
         Ok(mut resp) => {
             assert_eq!(resp.status(), StatusCode::OK);
 
             match resp.text() {
                 Ok(_body) => {}
-                Err(_e) => assert!(false)
+                Err(_e) => assert!(false),
             }
         }
-        Err(_e) => assert!(false)
+        Err(_e) => assert!(false),
     }
 
     // encode verification get request
@@ -258,30 +251,26 @@ fn op_put(client: &Client, db_id: String) {
     let out_bytes: Vec<u8> = out_msg.write_to_bytes().unwrap();
 
     // exec get request
-    let resp_res = client.post(&get_url)
-        .body(out_bytes.clone())
-        .send();
+    let resp_res = client.post(&get_url).body(out_bytes.clone()).send();
     match resp_res {
         Ok(mut resp) => {
             assert_eq!(resp.status(), StatusCode::OK);
 
             match resp.text() {
                 Ok(body) => assert_eq!(body, test_value),
-                Err(_e) => assert!(false)
+                Err(_e) => assert!(false),
             }
         }
-        Err(_e) => assert!(false)
+        Err(_e) => assert!(false),
     }
 
     // re-use same KeyRequest bytes for our delete request
 
     // exec del request
-    let resp_res = client.post(&del_url)
-        .body(out_bytes)
-        .send();
+    let resp_res = client.post(&del_url).body(out_bytes).send();
     match resp_res {
         Ok(resp) => assert_eq!(resp.status(), StatusCode::OK),
-        Err(_e) => assert!(false)
+        Err(_e) => assert!(false),
     }
 }
 
@@ -295,23 +284,21 @@ fn op_obj(client: &Client, db_id: String) {
     let resp_res = client.get(&url).send();
     match resp_res {
         Ok(resp) => assert_eq!(resp.status(), StatusCode::NOT_FOUND),
-        Err(_e) => assert!(false)
+        Err(_e) => assert!(false),
     }
 
     // verify DELETE(non exist) returns not-found
     let resp_res = client.delete(&url).send();
     match resp_res {
         Ok(resp) => assert_eq!(resp.status(), StatusCode::NOT_FOUND),
-        Err(_e) => assert!(false)
+        Err(_e) => assert!(false),
     }
 
     // PUT a new record
-    let resp_res = client.put(&url)
-        .body(test_value.clone())
-        .send();
+    let resp_res = client.put(&url).body(test_value.clone()).send();
     match resp_res {
         Ok(resp) => assert_eq!(resp.status(), StatusCode::OK),
-        Err(_e) => assert!(false)
+        Err(_e) => assert!(false),
     }
 
     // Check that the record exists with the correct contents.
@@ -322,10 +309,10 @@ fn op_obj(client: &Client, db_id: String) {
 
             match resp.text() {
                 Ok(body) => assert_eq!(body, test_value),
-                Err(_e) => assert!(false)
+                Err(_e) => assert!(false),
             }
         }
-        Err(_e) => assert!(false)
+        Err(_e) => assert!(false),
     }
 
     // Check that the record exists with the correct contents,
@@ -336,45 +323,42 @@ fn op_obj(client: &Client, db_id: String) {
     let out_bytes: Vec<u8> = out_msg.write_to_bytes().unwrap();
 
     let get_pb_url = format!("{}get", basepath);
-    let resp_res = client.post(&get_pb_url)
-        .body(out_bytes)
-        .send();
+    let resp_res = client.post(&get_pb_url).body(out_bytes).send();
     match resp_res {
         Ok(mut resp) => {
             assert_eq!(resp.status(), StatusCode::OK);
 
             match resp.text() {
                 Ok(body) => assert_eq!(body, test_value),
-                Err(_e) => assert!(false)
+                Err(_e) => assert!(false),
             }
         }
-        Err(_e) => assert!(false)
+        Err(_e) => assert!(false),
     }
 
     // DELETE record
     let resp_res = client.delete(&url).send();
     match resp_res {
         Ok(resp) => assert_eq!(resp.status(), StatusCode::OK),
-        Err(_e) => assert!(false)
+        Err(_e) => assert!(false),
     }
 
     // Check (again) that a record with key 1 doesn't exist.
     let resp_res = client.get(&url).send();
     match resp_res {
         Ok(resp) => assert_eq!(resp.status(), StatusCode::NOT_FOUND),
-        Err(_e) => assert!(false)
+        Err(_e) => assert!(false),
     }
 
     // verify (again) DELETE(non exist) returns not-found
     let resp_res = client.delete(&url).send();
     match resp_res {
         Ok(resp) => assert_eq!(resp.status(), StatusCode::NOT_FOUND),
-        Err(_e) => assert!(false)
+        Err(_e) => assert!(false),
     }
 }
 
 fn main() {
-
     // create http client
     let client = Client::new();
 
@@ -390,4 +374,3 @@ fn main() {
     }
     println!("Integration testing successful.");
 }
-
