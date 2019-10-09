@@ -10,7 +10,7 @@ const DEF_BIND_ADDR: &'static str = "127.0.0.1";
 const DEF_BIND_PORT: &'static str = "8080";
 
 use std::{env, io, fs, process};
-use std::sync::Mutex;
+use std::sync::{Arc,Mutex};
 use std::collections::HashMap;
 
 use actix_web::http::{StatusCode};
@@ -20,10 +20,173 @@ use actix_web::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use sled::{Db,ConfigBuilder,Batch};
 
 use protos::pbapi::{KeyRequest,BatchRequest,UpdateRequest};
 use protobuf::{parse_from_bytes};
+
+mod db {
+    pub enum MutationOp {
+        Insert,
+	Remove
+    }
+
+    pub struct Mutation {
+        pub op: MutationOp,
+	pub key: Vec<u8>,
+	pub value: Option<Vec<u8>>
+    }
+
+    pub struct Batch {
+        pub ops: Vec<Mutation>
+    }
+
+    impl Batch {
+        pub fn default() -> Batch {
+	    Batch {
+	        ops: Vec::new()
+	    }
+	}
+
+	pub fn insert(&mut self, key_in: &[u8], value_in: &[u8]) {
+	    self.ops.push(Mutation{
+	        op: MutationOp::Insert,
+		key: key_in.to_vec(),
+		value: Some(value_in.to_vec())
+	    });
+	}
+
+	pub fn remove(&mut self, key_in: &[u8]) {
+	    self.ops.push(Mutation{
+	        op: MutationOp::Remove,
+		key: key_in.to_vec(),
+		value: None
+	    });
+	}
+    }
+
+    pub struct Config {
+        pub path: String,
+	pub read_only: bool
+    }
+
+    pub struct ConfigBuilder {
+    	pub path: Option<String>,
+	pub read_only: Option<bool>
+    }
+
+    pub trait Db {
+        fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>, &'static str>;
+        fn put(&mut self, key: &[u8], val: &[u8]) -> Result<bool, &'static str>;
+        fn del(&mut self, key: &[u8]) -> Result<bool, &'static str>;
+        fn apply_batch(&mut self, batch: &Batch) -> Result<bool, &'static str>;
+    }
+
+    pub trait Driver {
+        fn start_db(&self, cfg: Config) -> Result<Box<dyn Db + Send>, &'static str>;
+    }
+
+    impl ConfigBuilder {
+    	pub fn new() -> ConfigBuilder {
+	    ConfigBuilder {
+	    	path: None,
+		read_only: None
+	    }
+	}
+
+	pub fn path(&mut self, path_in: String) -> &mut ConfigBuilder {
+	    self.path = Some(path_in);
+	    self
+	}
+
+	pub fn read_only(&mut self, val_in: bool) -> &mut ConfigBuilder {
+	    self.read_only = Some(val_in);
+	    self
+	}
+
+	pub fn build(&self) -> Config {
+	    Config {
+	    	path: match &self.path {
+		    None => String::from("./db"),
+		    Some(p) => String::from(p)
+		},
+		read_only: match &self.read_only {
+		    None => false,
+		    Some(v) => *v
+		}
+	    }
+	}
+    }
+}
+
+mod sled_driver {
+    pub struct SledDb {
+        db: sled::Db
+    }
+
+    impl crate::db::Db for SledDb {
+        fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>, &'static str> {
+	    match self.db.get(key) {
+	        Ok(opt_val) => match opt_val {
+		    None => Ok(None),
+		    Some(val) => Ok(Some(val.to_vec()))
+		},
+		Err(_e) => Err("get failed")
+	    }
+	}
+
+        fn put(&mut self, key: &[u8], val: &[u8]) -> Result<bool, &'static str>{
+	    match self.db.insert(key, val) {
+	        Ok(_old_val) => Ok(true),
+		Err(_e) => Err("put failed")
+	    }
+	}
+
+        fn del(&mut self, key: &[u8]) -> Result<bool, &'static str> {
+	    match self.db.remove(key) {
+	        Ok(old_val) => match old_val {
+		    None => Ok(false),
+		    Some(_v) => Ok(true)
+		},
+		Err(_e) => Err("del failed")
+	    }
+	}
+
+        fn apply_batch(&mut self, batch_in: &crate::db::Batch) -> Result<bool, &'static str> {
+	    let mut batch = sled::Batch::default();
+	    for mutation in &batch_in.ops {
+	        match mutation.op {
+		    crate::db::MutationOp::Insert => batch.insert(mutation.key.clone(), mutation.value.clone().unwrap()),
+		    crate::db::MutationOp::Remove => batch.remove(mutation.key.clone())
+		}
+	    }
+
+	    match self.db.apply_batch(batch) {
+	        Ok(_optval) => Ok(true),
+		Err(_e) => Err("batch failed")
+	    }
+	}
+    }
+
+    pub struct SledDriver {
+    }
+
+    impl crate::db::Driver for SledDriver {
+        fn start_db(&self, cfg: crate::db::Config) -> Result<Box<dyn crate::db::Db + Send>, &'static str> {
+	    let sled_db_cfg = sled::ConfigBuilder::new()
+	        .path(cfg.path)
+		.read_only(cfg.read_only)
+		.build();
+
+	    Ok(Box::new( SledDb {
+	        db: sled::Db::start(sled_db_cfg).unwrap()
+	    }) as Box<dyn crate::db::Db + Send>)
+	}
+    }
+
+    pub fn new_driver() -> Box<dyn crate::db::Driver> {
+        Box::new(SledDriver {})
+    }
+}
 
 // struct used for both input (server config file) and output (server info)
 #[derive(Serialize, Deserialize, Clone)]
@@ -50,14 +213,12 @@ struct ServerInfo {
 }
 
 // per-db runtime state info
-#[derive(Clone)]
 struct DbState {
     cfg: DbConfig,      // imported db configuration
-    db: Db              // open db handle
+    db: Box<dyn crate::db::Db + Send> // open db handle
 }
 
 // runtime server state info
-#[derive(Clone)]
 struct ServerState {
     debug: bool,
     name_idx: HashMap<String,usize>,
@@ -136,7 +297,7 @@ fn ok_json(jval: serde_json::Value) -> Result<HttpResponse> {
 
 /// simple root index handler, describes our service
 #[get("/")]
-fn req_index(m_state: web::Data<Mutex<ServerState>>, req: HttpRequest) -> Result<HttpResponse> {
+fn req_index(m_state: web::Data<Arc<Mutex<ServerState>>>, req: HttpRequest) -> Result<HttpResponse> {
 
     // fill basic server info struct used for output
     let mut srv_info = ServerInfo {
@@ -162,7 +323,7 @@ fn req_index(m_state: web::Data<Mutex<ServerState>>, req: HttpRequest) -> Result
 }
 
 /// DELETE data item. key in HTTP payload.  return ok as json response
-fn req_del(m_state: web::Data<Mutex<ServerState>>, req: HttpRequest,
+fn req_del(m_state: web::Data<Arc<Mutex<ServerState>>>, req: HttpRequest,
            (path,body): (web::Path<(String,)>,web::Bytes)) -> Result<HttpResponse> {
 
     // decode protobuf msg containing key, into KeyRequest struct
@@ -173,7 +334,7 @@ fn req_del(m_state: web::Data<Mutex<ServerState>>, req: HttpRequest,
     }
 
     // lock runtime-live state data
-    let state = m_state.lock().unwrap();
+    let mut state = m_state.lock().unwrap();
     if state.debug { println!("{:?}", req); }
 
     // lookup database index by name (path elem 0)
@@ -184,20 +345,20 @@ fn req_del(m_state: web::Data<Mutex<ServerState>>, req: HttpRequest,
     }
 
     // attempt to remove record from db, based on key (path elem 1)
-    match state.dbs[idx].db.remove(in_msg.get_key()) {
+    match state.dbs[idx].db.del(in_msg.get_key()) {
         Ok(optval) => match optval {
-            Some(_val) => ok_json(json!({"result": true})),
-            None => err_not_found()     // db: value not found
+            true => ok_json(json!({"result": true})),
+            false => err_not_found()     // db: value not found
         },
         Err(_e) => err_500()            // db: error
     }
 }
 
 /// DELETE data item.  key in URI path.  return ok as json response
-fn req_obj_delete(m_state: web::Data<Mutex<ServerState>>, req: HttpRequest, path: web::Path<(String,String)>) -> Result<HttpResponse> {
+fn req_obj_delete(m_state: web::Data<Arc<Mutex<ServerState>>>, req: HttpRequest, path: web::Path<(String,String)>) -> Result<HttpResponse> {
 
     // lock runtime-live state data
-    let state = m_state.lock().unwrap();
+    let mut state = m_state.lock().unwrap();
     if state.debug { println!("{:?}", req); }
 
     // lookup database index by name (path elem 0)
@@ -208,17 +369,17 @@ fn req_obj_delete(m_state: web::Data<Mutex<ServerState>>, req: HttpRequest, path
     }
 
     // attempt to remove record from db, based on key (path elem 1)
-    match state.dbs[idx].db.remove(path.1.clone()) {
+    match state.dbs[idx].db.del(path.1.as_bytes()) {
         Ok(optval) => match optval {
-            Some(_val) => ok_json(json!({"result": true})),
-            None => err_not_found()     // db: value not found
+            true => ok_json(json!({"result": true})),
+            false => err_not_found()     // db: value not found
         },
         Err(_e) => err_500()            // db: error
     }
 }
 
 /// GET data item. key in URI path, returns value in HTTP payload.
-fn req_obj_get(m_state: web::Data<Mutex<ServerState>>, req: HttpRequest, path: web::Path<(String,String)>) -> Result<HttpResponse> {
+fn req_obj_get(m_state: web::Data<Arc<Mutex<ServerState>>>, req: HttpRequest, path: web::Path<(String,String)>) -> Result<HttpResponse> {
 
     // lock runtime-live state data
     let state = m_state.lock().unwrap();
@@ -232,7 +393,7 @@ fn req_obj_get(m_state: web::Data<Mutex<ServerState>>, req: HttpRequest, path: w
     }
 
     // attempt to read record from db, based on key (path elem 1)
-    match state.dbs[idx].db.get(path.1.clone()) {
+    match state.dbs[idx].db.get(path.1.as_bytes()) {
         Ok(optval) => match optval {
             Some(val) => ok_binary(val.to_vec()),
             None => err_not_found()     // db: value not found
@@ -242,7 +403,7 @@ fn req_obj_get(m_state: web::Data<Mutex<ServerState>>, req: HttpRequest, path: w
 }
 
 /// GET data item. key in HTTP payload, returns value in HTTP payload.
-fn req_get(m_state: web::Data<Mutex<ServerState>>, req: HttpRequest,
+fn req_get(m_state: web::Data<Arc<Mutex<ServerState>>>, req: HttpRequest,
            (path,body): (web::Path<(String,)>,web::Bytes)) -> Result<HttpResponse> {
 
     // decode protobuf msg containing key, into KeyRequest struct
@@ -274,7 +435,7 @@ fn req_get(m_state: web::Data<Mutex<ServerState>>, req: HttpRequest,
 }
 
 /// atomic PUT of multiple data items. data items in HTTP payload. ret json ok.
-fn req_batch(m_state: web::Data<Mutex<ServerState>>, req: HttpRequest,
+fn req_batch(m_state: web::Data<Arc<Mutex<ServerState>>>, req: HttpRequest,
            (path,body): (web::Path<(String,)>,web::Bytes)) -> Result<HttpResponse> {
 
     // decode protobuf msg containing key/value pairs
@@ -285,18 +446,18 @@ fn req_batch(m_state: web::Data<Mutex<ServerState>>, req: HttpRequest,
     }
 
     // build sled batch
-    let mut batch = Batch::default();
+    let mut batch = db::Batch::default();
     let updates = in_msg.reqs.to_vec();
     for update in &updates {
         if update.is_insert {
-            batch.insert(update.key.clone(), update.value.clone());
+            batch.insert(&update.key, &update.value);
         } else {
-            batch.remove(update.key.clone());
+            batch.remove(&update.key);
         }
     }
 
     // lock runtime-live state data
-    let state = m_state.lock().unwrap();
+    let mut state = m_state.lock().unwrap();
     if state.debug { println!("{:?}", req); }
 
     // lookup database index by name (path elem 0)
@@ -307,18 +468,18 @@ fn req_batch(m_state: web::Data<Mutex<ServerState>>, req: HttpRequest,
     }
 
     // attempt to store record in db, based on key (path elem 1)
-    match state.dbs[idx].db.apply_batch(batch) {
+    match state.dbs[idx].db.apply_batch(&batch) {
         Ok(_optval) => ok_json(json!({"result": true})),
         Err(_e) => err_500()            // db: error
     }
 }
 
 /// PUT data item. key in URI path, value in HTTP payload.
-fn req_obj_put(m_state: web::Data<Mutex<ServerState>>, req: HttpRequest,
+fn req_obj_put(m_state: web::Data<Arc<Mutex<ServerState>>>, req: HttpRequest,
            (path,body): (web::Path<(String,String)>,web::Bytes)) -> Result<HttpResponse> {
 
     // lock runtime-live state data
-    let state = m_state.lock().unwrap();
+    let mut state = m_state.lock().unwrap();
     if state.debug { println!("{:?}", req); }
 
     // lookup database index by name (path elem 0)
@@ -329,14 +490,14 @@ fn req_obj_put(m_state: web::Data<Mutex<ServerState>>, req: HttpRequest,
     }
 
     // attempt to store record in db, based on key (path elem 1)
-    match state.dbs[idx].db.insert(path.1.as_str(), body.to_vec()) {
+    match state.dbs[idx].db.put(path.1.as_bytes(), &body.to_vec()) {
         Ok(_optval) => ok_json(json!({"result": true})),
         Err(_e) => err_500()            // db: error
     }
 }
 
 /// PUT data item. key/value in HTTP payload.
-fn req_put(m_state: web::Data<Mutex<ServerState>>, req: HttpRequest,
+fn req_put(m_state: web::Data<Arc<Mutex<ServerState>>>, req: HttpRequest,
            (path,body): (web::Path<(String,)>,web::Bytes)) -> Result<HttpResponse> {
 
     // decode protobuf msg containing key, into KeyRequest struct
@@ -348,7 +509,7 @@ fn req_put(m_state: web::Data<Mutex<ServerState>>, req: HttpRequest,
     if !in_msg.is_insert { return err_bad_req(); }
 
     // lock runtime-live state data
-    let state = m_state.lock().unwrap();
+    let mut state = m_state.lock().unwrap();
     if state.debug { println!("{:?}", req); }
 
     // lookup database index by name (path elem 0)
@@ -359,7 +520,7 @@ fn req_put(m_state: web::Data<Mutex<ServerState>>, req: HttpRequest,
     }
 
     // attempt to store record in db, based on key
-    match state.dbs[idx].db.insert(in_msg.key, in_msg.value) {
+    match state.dbs[idx].db.put(&in_msg.key, &in_msg.value) {
         Ok(_optval) => ok_json(json!({"result": true})),
         Err(_e) => err_500()            // db: error
     }
@@ -423,11 +584,8 @@ fn main() -> io::Result<()> {
     let server_hdr = format!("{}/{}", APPNAME, VERSION);
 
     // init server state
-    let mut srv_state = ServerState {
-        debug: false,
-        name_idx: HashMap::new(),
-        dbs: Vec::new()
-    };
+    let mut name_idx = HashMap::new();
+    let mut dbs = Vec::new();
 
     // determine if zeroconf is requested
     let mut zeroconf = false;
@@ -461,9 +619,8 @@ fn main() -> io::Result<()> {
     for db_cfg in &server_cfg.databases {
 
         // setup sled backend config
-        let db_config = ConfigBuilder::new()
+        let db_config = db::ConfigBuilder::new()
             .path(db_cfg.path.clone())
-            .use_compression(false)
             .read_only(db_cfg.read_only)
             .build();
 
@@ -473,14 +630,22 @@ fn main() -> io::Result<()> {
             process::exit(1);
         }
 
+	let driver = sled_driver::new_driver();
+
         // add db to server state
-        let next_idx = srv_state.dbs.len();
-        srv_state.name_idx.insert(db_cfg.name.clone(), next_idx);
-        srv_state.dbs.push( DbState {
+        let next_idx = dbs.len();
+        name_idx.insert(db_cfg.name.clone(), next_idx);
+        dbs.push( DbState {
             cfg: db_cfg.clone(),
-            db: Db::start(db_config).unwrap()
+            db: driver.start_db(db_config).unwrap()
         });
     }
+
+    let srv_state = Arc::new(Mutex::new(ServerState {
+	    	debug: false,
+		name_idx: name_idx,
+		dbs: dbs
+	    }));
 
     // configure web server
     let sys = actix_rt::System::new(APPNAME);
@@ -488,7 +653,7 @@ fn main() -> io::Result<()> {
     HttpServer::new(move || {
         App::new()
             // pass application state to each handler
-            .data(Mutex::new(srv_state.clone()))
+            .data(Arc::clone(&srv_state))
 
             // apply default headers
             .wrap(middleware::DefaultHeaders::new().header("Server", server_hdr.to_string()))
