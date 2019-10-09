@@ -97,31 +97,31 @@ mod tests {
     use super::*;
 
     pub struct MemDb {
-        db: HashMap<Vec<u8>, Vec<u8>>
+        db: HashMap<Vec<u8>, Vec<u8>>,
     }
 
     impl Db for MemDb {
         fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>, &'static str> {
             match self.db.get(key) {
-		None => Ok(None),
-                Some(val) => Ok(Some(val.to_vec()))
+                None => Ok(None),
+                Some(val) => Ok(Some(val.to_vec())),
             }
         }
 
         fn put(&mut self, key: &[u8], val: &[u8]) -> Result<bool, &'static str> {
             self.db.insert(key.to_vec(), val.to_vec());
-	    Ok(true)
+            Ok(true)
         }
 
         fn del(&mut self, key: &[u8]) -> Result<bool, &'static str> {
             match self.db.remove(key) {
                 None => Ok(false),
-                Some(_v) => Ok(true)
+                Some(_v) => Ok(true),
             }
         }
 
         fn apply_batch(&mut self, _batch_in: &Batch) -> Result<bool, &'static str> {
-	    Err("not implemented")
+            Err("not implemented")
         }
     }
 
@@ -129,9 +129,7 @@ mod tests {
 
     impl Driver for MemDriver {
         fn start_db(&self, _cfg: Config) -> Result<Box<dyn Db + Send>, &'static str> {
-            Ok(Box::new(MemDb {
-                db: HashMap::new()
-            }) as Box<dyn Db + Send>)
+            Ok(Box::new(MemDb { db: HashMap::new() }) as Box<dyn Db + Send>)
         }
     }
 
@@ -142,18 +140,18 @@ mod tests {
     #[test]
     fn test_op_get() {
         let db_config = ConfigBuilder::new()
-	    .path("/dev/null".to_string())
-	    .read_only(false)
-	    .build();
+            .path("/dev/null".to_string())
+            .read_only(false)
+            .build();
 
         let driver = new_driver();
 
-	let mut db = driver.start_db(db_config).unwrap();
+        let mut db = driver.start_db(db_config).unwrap();
 
-	assert_eq!(db.get(b"name"), Ok(None));
-	assert_eq!(db.put(b"name", b"alan"), Ok(true));
-	assert_eq!(db.get(b"name"), Ok(Some(Vec::from("alan"))));
-	assert_eq!(db.del(b"name"), Ok(true));
-	assert_eq!(db.del(b"name"), Ok(false));
+        assert_eq!(db.get(b"name"), Ok(None));
+        assert_eq!(db.put(b"name", b"alan"), Ok(true));
+        assert_eq!(db.get(b"name"), Ok(Some(Vec::from("alan"))));
+        assert_eq!(db.del(b"name"), Ok(true));
+        assert_eq!(db.del(b"name"), Ok(false));
     }
 }
