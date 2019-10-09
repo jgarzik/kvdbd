@@ -2,6 +2,7 @@
 #[macro_use] extern crate actix_web;
 extern crate clap;
 mod protos;
+mod db;
 
 const APPNAME: &'static str = "kvdbd";
 const VERSION: &'static str = env!("CARGO_PKG_VERSION");
@@ -23,170 +24,6 @@ use serde_json::json;
 
 use protos::pbapi::{KeyRequest,BatchRequest,UpdateRequest};
 use protobuf::{parse_from_bytes};
-
-mod db {
-    pub enum MutationOp {
-        Insert,
-	Remove
-    }
-
-    pub struct Mutation {
-        pub op: MutationOp,
-	pub key: Vec<u8>,
-	pub value: Option<Vec<u8>>
-    }
-
-    pub struct Batch {
-        pub ops: Vec<Mutation>
-    }
-
-    impl Batch {
-        pub fn default() -> Batch {
-	    Batch {
-	        ops: Vec::new()
-	    }
-	}
-
-	pub fn insert(&mut self, key_in: &[u8], value_in: &[u8]) {
-	    self.ops.push(Mutation{
-	        op: MutationOp::Insert,
-		key: key_in.to_vec(),
-		value: Some(value_in.to_vec())
-	    });
-	}
-
-	pub fn remove(&mut self, key_in: &[u8]) {
-	    self.ops.push(Mutation{
-	        op: MutationOp::Remove,
-		key: key_in.to_vec(),
-		value: None
-	    });
-	}
-    }
-
-    pub struct Config {
-        pub path: String,
-	pub read_only: bool
-    }
-
-    pub struct ConfigBuilder {
-    	pub path: Option<String>,
-	pub read_only: Option<bool>
-    }
-
-    pub trait Db {
-        fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>, &'static str>;
-        fn put(&mut self, key: &[u8], val: &[u8]) -> Result<bool, &'static str>;
-        fn del(&mut self, key: &[u8]) -> Result<bool, &'static str>;
-        fn apply_batch(&mut self, batch: &Batch) -> Result<bool, &'static str>;
-    }
-
-    pub trait Driver {
-        fn start_db(&self, cfg: Config) -> Result<Box<dyn Db + Send>, &'static str>;
-    }
-
-    impl ConfigBuilder {
-    	pub fn new() -> ConfigBuilder {
-	    ConfigBuilder {
-	    	path: None,
-		read_only: None
-	    }
-	}
-
-	pub fn path(&mut self, path_in: String) -> &mut ConfigBuilder {
-	    self.path = Some(path_in);
-	    self
-	}
-
-	pub fn read_only(&mut self, val_in: bool) -> &mut ConfigBuilder {
-	    self.read_only = Some(val_in);
-	    self
-	}
-
-	pub fn build(&self) -> Config {
-	    Config {
-	    	path: match &self.path {
-		    None => String::from("./db"),
-		    Some(p) => String::from(p)
-		},
-		read_only: match &self.read_only {
-		    None => false,
-		    Some(v) => *v
-		}
-	    }
-	}
-    }
-}
-
-mod sled_driver {
-    pub struct SledDb {
-        db: sled::Db
-    }
-
-    impl crate::db::Db for SledDb {
-        fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>, &'static str> {
-	    match self.db.get(key) {
-	        Ok(opt_val) => match opt_val {
-		    None => Ok(None),
-		    Some(val) => Ok(Some(val.to_vec()))
-		},
-		Err(_e) => Err("get failed")
-	    }
-	}
-
-        fn put(&mut self, key: &[u8], val: &[u8]) -> Result<bool, &'static str>{
-	    match self.db.insert(key, val) {
-	        Ok(_old_val) => Ok(true),
-		Err(_e) => Err("put failed")
-	    }
-	}
-
-        fn del(&mut self, key: &[u8]) -> Result<bool, &'static str> {
-	    match self.db.remove(key) {
-	        Ok(old_val) => match old_val {
-		    None => Ok(false),
-		    Some(_v) => Ok(true)
-		},
-		Err(_e) => Err("del failed")
-	    }
-	}
-
-        fn apply_batch(&mut self, batch_in: &crate::db::Batch) -> Result<bool, &'static str> {
-	    let mut batch = sled::Batch::default();
-	    for mutation in &batch_in.ops {
-	        match mutation.op {
-		    crate::db::MutationOp::Insert => batch.insert(mutation.key.clone(), mutation.value.clone().unwrap()),
-		    crate::db::MutationOp::Remove => batch.remove(mutation.key.clone())
-		}
-	    }
-
-	    match self.db.apply_batch(batch) {
-	        Ok(_optval) => Ok(true),
-		Err(_e) => Err("batch failed")
-	    }
-	}
-    }
-
-    pub struct SledDriver {
-    }
-
-    impl crate::db::Driver for SledDriver {
-        fn start_db(&self, cfg: crate::db::Config) -> Result<Box<dyn crate::db::Db + Send>, &'static str> {
-	    let sled_db_cfg = sled::ConfigBuilder::new()
-	        .path(cfg.path)
-		.read_only(cfg.read_only)
-		.build();
-
-	    Ok(Box::new( SledDb {
-	        db: sled::Db::start(sled_db_cfg).unwrap()
-	    }) as Box<dyn crate::db::Db + Send>)
-	}
-    }
-
-    pub fn new_driver() -> Box<dyn crate::db::Driver> {
-        Box::new(SledDriver {})
-    }
-}
 
 // struct used for both input (server config file) and output (server info)
 #[derive(Serialize, Deserialize, Clone)]
@@ -215,7 +52,7 @@ struct ServerInfo {
 // per-db runtime state info
 struct DbState {
     cfg: DbConfig,      // imported db configuration
-    db: Box<dyn crate::db::Db + Send> // open db handle
+    db: Box<dyn crate::db::api::Db + Send> // open db handle
 }
 
 // runtime server state info
@@ -445,8 +282,8 @@ fn req_batch(m_state: web::Data<Arc<Mutex<ServerState>>>, req: HttpRequest,
         Ok(req) => { in_msg = req; }
     }
 
-    // build sled batch
-    let mut batch = db::Batch::default();
+    // build batch
+    let mut batch = db::api::Batch::default();
     let updates = in_msg.reqs.to_vec();
     for update in &updates {
         if update.is_insert {
@@ -618,8 +455,8 @@ fn main() -> io::Result<()> {
     // configure and open databases
     for db_cfg in &server_cfg.databases {
 
-        // setup sled backend config
-        let db_config = db::ConfigBuilder::new()
+        // setup backend config
+        let db_config = db::api::ConfigBuilder::new()
             .path(db_cfg.path.clone())
             .read_only(db_cfg.read_only)
             .build();
@@ -630,7 +467,7 @@ fn main() -> io::Result<()> {
             process::exit(1);
         }
 
-	let driver = sled_driver::new_driver();
+	let driver = db::sled::new_driver();
 
         // add db to server state
         let next_idx = dbs.len();
