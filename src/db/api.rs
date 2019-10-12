@@ -152,6 +152,23 @@ mod tests {
         assert_eq!(db.put(b"name", b"alan"), Ok(true));
         assert_eq!(db.get(b"name"), Ok(Some(Vec::from("alan"))));
         assert_eq!(db.del(b"name"), Ok(true));
+        assert_eq!(db.get(b"name"), Ok(None));
+        assert_eq!(db.get(b"never_existed"), Ok(None));
+    }
+
+    #[test]
+    fn test_op_del() {
+        let db_config = ConfigBuilder::new()
+            .path("/dev/null".to_string())
+            .read_only(false)
+            .build();
+
+        let driver = new_driver();
+
+        let mut db = driver.start_db(db_config).unwrap();
+
+        assert_eq!(db.put(b"name", b"alan"), Ok(true));
+        assert_eq!(db.del(b"name"), Ok(true));
         assert_eq!(db.del(b"name"), Ok(false));
     }
 }
