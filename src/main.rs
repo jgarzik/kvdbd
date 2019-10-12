@@ -48,8 +48,8 @@ struct ServerInfo {
 
 // per-db runtime state info
 struct DbState {
-    cfg: DbConfig,                          // imported db configuration
-    db: Box<dyn crate::db::api::Db + Send>, // open db handle
+    cfg: DbConfig,                   // imported db configuration
+    db: Box<dyn db::api::Db + Send>, // open db handle
 }
 
 // runtime server state info
@@ -62,6 +62,7 @@ struct ServerState {
 struct Backend {
     cli_help: String,
     cli_value_name: String,
+    driver: Box<dyn db::api::Driver>,
 }
 
 struct BackendState {
@@ -74,6 +75,7 @@ fn build_backend(id: &str) -> Backend {
     Backend {
         cli_help: help_str,
         cli_value_name: value_str,
+        driver: db::sled::new_driver(), // fixme: hardcodes sled driver
     }
 }
 
@@ -534,14 +536,14 @@ fn main() -> io::Result<()> {
             process::exit(1);
         }
 
-        let driver = db::sled::new_driver();
+        let backend = &backend_state.backends[&db_cfg.driver];
 
         // add db to server state
         let next_idx = dbs.len();
         name_idx.insert(db_cfg.name.clone(), next_idx);
         dbs.push(DbState {
             cfg: db_cfg.clone(),
-            db: driver.start_db(db_config).unwrap(),
+            db: backend.driver.start_db(db_config).unwrap(),
         });
     }
 
