@@ -1,7 +1,7 @@
 # kvdbd
 
 Daemon that enables reading/writing of flat-file key/value databases
-available via HTTP REST/JSON API.
+available via HTTP API, using REST/JSON or Protobufs.
 
 ## Goals
 
