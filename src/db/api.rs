@@ -120,8 +120,20 @@ mod tests {
             }
         }
 
-        fn apply_batch(&mut self, _batch_in: &Batch) -> Result<bool, &'static str> {
-            Err("not implemented")
+        fn apply_batch(&mut self, batch: &Batch) -> Result<bool, &'static str> {
+            for dbm in &batch.ops {
+                match dbm.op {
+                    MutationOp::Insert => {
+                        let val: Vec<u8> = dbm.value.clone().unwrap();
+                        self.db.insert(dbm.key.to_vec(), val);
+                    }
+                    MutationOp::Remove => {
+                        self.db.remove(&dbm.key);
+                    }
+                }
+            }
+
+            Ok(true)
         }
     }
 
@@ -138,7 +150,7 @@ mod tests {
     }
 
     #[test]
-    fn test_op_get() {
+    fn test_get_put() {
         let db_config = ConfigBuilder::new()
             .path("/dev/null".to_string())
             .read_only(false)
@@ -157,7 +169,7 @@ mod tests {
     }
 
     #[test]
-    fn test_op_del() {
+    fn test_del() {
         let db_config = ConfigBuilder::new()
             .path("/dev/null".to_string())
             .read_only(false)
@@ -170,5 +182,29 @@ mod tests {
         assert_eq!(db.put(b"name", b"alan"), Ok(true));
         assert_eq!(db.del(b"name"), Ok(true));
         assert_eq!(db.del(b"name"), Ok(false));
+    }
+
+    #[test]
+    fn test_batch() {
+        let db_config = ConfigBuilder::new()
+            .path("/dev/null".to_string())
+            .read_only(false)
+            .build();
+
+        let driver = new_driver();
+
+        let mut db = driver.start_db(db_config).unwrap();
+
+        assert_eq!(db.put(b"name", b"alan"), Ok(true));
+
+        let mut batch = Batch::default();
+        batch.insert(b"age", b"25");
+        batch.insert(b"city", b"anytown");
+        batch.remove(b"name");
+        assert_eq!(db.apply_batch(&batch), Ok(true));
+
+        assert_eq!(db.get(b"name"), Ok(None));
+        assert_eq!(db.get(b"age"), Ok(Some(Vec::from("25"))));
+        assert_eq!(db.get(b"city"), Ok(Some(Vec::from("anytown"))));
     }
 }
