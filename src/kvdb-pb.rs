@@ -5,11 +5,11 @@ const APPNAME: &'static str = "kvdb-pb";
 const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
 use std::fs::File;
-use std::io::Write;
+use std::io::{BufRead, BufReader, Write};
 use std::{env, io, process};
 
 use protobuf::Message;
-use protos::pbapi::{KeyRequest, UpdateRequest};
+use protos::pbapi::{BatchRequest, KeyRequest, UpdateRequest};
 
 fn stdout_bytes(b: &[u8]) -> io::Result<()> {
     use std::os::unix::io::FromRawFd;
@@ -40,12 +40,62 @@ fn encode_put(key: String, val: String) -> io::Result<()> {
     stdout_bytes(&out_bytes)
 }
 
+fn encode_batch(batch_path: String) -> io::Result<()> {
+    let file = File::open(batch_path)?;
+    let mut reader = BufReader::new(file);
+
+    let mut out_msg = BatchRequest::new();
+
+    loop {
+        let mut line = String::new();
+        let rc = reader.read_line(&mut line)?;
+        if rc == 0 {
+            break;
+        }
+
+        // Line 1: operation (insert, remove, ...)
+        line = line.trim_end().to_string();
+        match line.as_ref() {
+            "i" => {
+                let mut key = String::new();
+                reader.read_line(&mut key)?;
+                key = key.trim_end().to_string();
+
+                let mut value = String::new();
+                reader.read_line(&mut value)?;
+                value = value.trim_end().to_string();
+
+                let mut req = UpdateRequest::new();
+                req.set_key(key.as_bytes().to_vec());
+                req.set_value(value.as_bytes().to_vec());
+                req.set_is_insert(true);
+                out_msg.reqs.push(req);
+            }
+            "r" => {
+                let mut key = String::new();
+                reader.read_line(&mut key)?;
+                key = key.trim_end().to_string();
+
+                let mut req = UpdateRequest::new();
+                req.set_key(key.as_bytes().to_vec());
+                req.set_is_insert(false);
+                out_msg.reqs.push(req);
+            }
+            _ => panic!("Invalid batch op line"),
+        }
+    }
+
+    let out_bytes: Vec<u8> = out_msg.write_to_bytes().unwrap();
+
+    stdout_bytes(&out_bytes)
+}
+
 fn main() -> io::Result<()> {
     env::set_var("RUST_LOG", "actix_web=debug");
     env_logger::init();
 
     // parse command line
-    let op_vals = ["get", "del", "put"];
+    let op_vals = ["get", "del", "put", "batch"];
     let cli_matches = clap::App::new(APPNAME)
         .version(VERSION)
         .about("Wire protocol encode/decode for kvdbd")
@@ -82,6 +132,13 @@ fn main() -> io::Result<()> {
                 .help("Value in a key/value pair")
                 .takes_value(true),
         )
+        .arg(
+            clap::Arg::with_name("batch")
+                .long("batch")
+                .value_name("KEY-VALUE-FILE")
+                .help("Import stream of key/value put/del mutations")
+                .takes_value(true),
+        )
         .get_matches();
 
     if cli_matches.is_present("decode") {
@@ -111,12 +168,20 @@ fn main() -> io::Result<()> {
                 let val = cli_matches.value_of("value").unwrap();
                 return encode_put(key.to_string(), val.to_string());
             }
-            _ => {}
+            "batch" => {
+                if !cli_matches.is_present("batch") {
+                    println!("Missing --batch");
+                    process::exit(1);
+                }
+                let batch_path = cli_matches.value_of("batch").unwrap();
+                return encode_batch(batch_path.to_string());
+            }
+            _ => {
+                panic!("Unhandled operation - should not happen");
+            }
         }
     } else {
         println!("Either --decode or --encode must be supplied.");
         process::exit(1);
     }
-
-    Ok(())
 }
