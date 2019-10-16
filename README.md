@@ -11,7 +11,7 @@ available via HTTP API, using REST/JSON or Protobufs.
 * Modern HTTP service with threads, HTTP/2 etc.
 * Beyond Get/Put/Delete, expose db-specific operations such as transactions or batch-update.
 * Access multiple databases simultaneously from a single HTTP endpoint.
-* [Support multiple database back-ends](https://github.com/jgarzik/kvdbd/issues/6) (sled, leveldb, lmdb, gdbm, ...) (TODO)
+* Support multiple database back-ends (sled, lmdb, more soon)
 * Docker-friendly Zero configuration mode
 
 ## Documentation
