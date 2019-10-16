@@ -75,7 +75,11 @@ fn build_backend(id: &str) -> Backend {
     Backend {
         cli_help: help_str,
         cli_value_name: value_str,
-        driver: db::sled::new_driver(), // fixme: hardcodes sled driver
+        driver: match id {
+            "sled" => db::sled::new_driver(),
+            "lmdb" => db::lmdb::new_driver(),
+            _ => panic!("unknown db driver"),
+        },
     }
 }
 
@@ -86,6 +90,8 @@ fn register_backends() -> BackendState {
 
     bs.backends
         .insert(String::from("sled"), build_backend("sled"));
+    bs.backends
+        .insert(String::from("lmdb"), build_backend("lmdb"));
 
     return bs;
 }
