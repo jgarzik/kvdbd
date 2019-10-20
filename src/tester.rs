@@ -216,6 +216,26 @@ fn op_get(client: &Client, db_id: String) {
     t_get_gone(client, db_id, test_key);
 }
 
+fn op_clear(client: &Client, db_id: String) {
+    let basepath = format!("{}{}/{}/", T_ENDPOINT, T_BASEURI, db_id);
+    let clear_url = format!("{}clear", basepath);
+    let test_key = String::from("op_clear_key");
+    let test_value = format!("helloworld op_clear {}", db_id);
+
+    t_get_gone(client, db_id.clone(), test_key.clone());
+    t_put(client, db_id.clone(), test_key.clone(), test_value.clone());
+    t_get_ok(client, db_id.clone(), test_key.clone(), test_value);
+
+    // exec clear-db request
+    let resp_res = client.post(&clear_url).send();
+    match resp_res {
+        Ok(resp) => assert_eq!(resp.status(), StatusCode::OK),
+        Err(_e) => assert!(false),
+    }
+
+    t_get_gone(client, db_id, test_key);
+}
+
 fn op_put(client: &Client, db_id: String) {
     let basepath = format!("{}{}/{}/", T_ENDPOINT, T_BASEURI, db_id);
     let put_url = format!("{}put", basepath);
@@ -371,6 +391,7 @@ fn main() {
         op_get(&client, db_id.clone());
         op_obj(&client, db_id.clone());
         op_put(&client, db_id.clone());
+        op_clear(&client, db_id.clone());
     }
     println!("Integration testing successful.");
 }

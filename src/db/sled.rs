@@ -5,6 +5,13 @@ pub struct SledDb {
 }
 
 impl api::Db for SledDb {
+    fn clear(&mut self) -> Result<bool, &'static str> {
+        match self.db.clear() {
+            Ok(_) => Ok(true),
+            Err(_e) => Err("clear failed"),
+        }
+    }
+
     fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>, &'static str> {
         match self.db.get(key) {
             Ok(opt_val) => match opt_val {
@@ -133,5 +140,23 @@ mod tests {
         assert_eq!(db.get(b"name"), Ok(None));
         assert_eq!(db.get(b"age"), Ok(Some(Vec::from("25"))));
         assert_eq!(db.get(b"city"), Ok(Some(Vec::from("anytown"))));
+    }
+
+    #[test]
+    fn test_clear() {
+        let tmp_dir = TempDir::new("tc").unwrap();
+        let tmp_path = tmp_dir.path().to_str().unwrap().to_string();
+        let db_config = ConfigBuilder::new().path(tmp_path).read_only(false).build();
+
+        let driver = new_driver();
+
+        let mut db = driver.start_db(db_config).unwrap();
+
+        assert_eq!(db.put(b"name", b"alan"), Ok(true));
+        assert_eq!(db.put(b"age", b"25"), Ok(true));
+        assert_eq!(db.get(b"name"), Ok(Some(Vec::from("alan"))));
+        assert_eq!(db.clear(), Ok(true));
+        assert_eq!(db.get(b"name"), Ok(None));
+        assert_eq!(db.get(b"age"), Ok(None));
     }
 }

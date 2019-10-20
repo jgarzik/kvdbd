@@ -50,6 +50,7 @@ pub trait Db {
     fn put(&mut self, key: &[u8], val: &[u8]) -> Result<bool, &'static str>;
     fn del(&mut self, key: &[u8]) -> Result<bool, &'static str>;
     fn apply_batch(&mut self, batch: &Batch) -> Result<bool, &'static str>;
+    fn clear(&mut self) -> Result<bool, &'static str>;
 }
 
 pub trait Driver {
@@ -101,6 +102,11 @@ mod tests {
     }
 
     impl Db for MemDb {
+        fn clear(&mut self) -> Result<bool, &'static str> {
+            self.db.clear();
+            Ok(true)
+        }
+
         fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>, &'static str> {
             match self.db.get(key) {
                 None => Ok(None),
@@ -206,5 +212,24 @@ mod tests {
         assert_eq!(db.get(b"name"), Ok(None));
         assert_eq!(db.get(b"age"), Ok(Some(Vec::from("25"))));
         assert_eq!(db.get(b"city"), Ok(Some(Vec::from("anytown"))));
+    }
+
+    #[test]
+    fn test_clear() {
+        let db_config = ConfigBuilder::new()
+            .path("/dev/null".to_string())
+            .read_only(false)
+            .build();
+
+        let driver = new_driver();
+
+        let mut db = driver.start_db(db_config).unwrap();
+
+        assert_eq!(db.put(b"name", b"alan"), Ok(true));
+        assert_eq!(db.put(b"age", b"25"), Ok(true));
+        assert_eq!(db.get(b"name"), Ok(Some(Vec::from("alan"))));
+        assert_eq!(db.clear(), Ok(true));
+        assert_eq!(db.get(b"name"), Ok(None));
+        assert_eq!(db.get(b"age"), Ok(None));
     }
 }
