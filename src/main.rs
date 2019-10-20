@@ -180,6 +180,32 @@ fn req_index(
     ok_json(jv)
 }
 
+/// CLEAR all data items.
+fn req_clear(
+    m_state: web::Data<Arc<Mutex<ServerState>>>,
+    req: HttpRequest,
+    path: web::Path<(String,)>,
+) -> Result<HttpResponse> {
+    // lock runtime-live state data
+    let mut state = m_state.lock().unwrap();
+    if state.debug {
+        println!("{:?}", req);
+    }
+
+    // lookup database index by name (path elem 0)
+    let idx: usize;
+    match state.name_idx.get(&path.0) {
+        None => return err_not_found(),
+        Some(r_idx) => idx = *r_idx,
+    }
+
+    // attempt to clear all records from db
+    match state.dbs[idx].db.clear() {
+        Ok(_optval) => ok_json(json!({"result": true})),
+        Err(_e) => err_500(), // db: error
+    }
+}
+
 /// DELETE data item. key in HTTP payload.  return ok as json response
 fn req_del(
     m_state: web::Data<Arc<Mutex<ServerState>>>,
@@ -572,6 +598,7 @@ fn main() -> io::Result<()> {
             .wrap(middleware::Logger::default())
             // register our routes
             .service(req_index)
+            .service(web::resource("/api/{db}/clear").route(web::post().to(req_clear)))
             .service(web::resource("/api/{db}/batch").route(web::post().to(req_batch)))
             .service(web::resource("/api/{db}/del").route(web::post().to(req_del)))
             .service(web::resource("/api/{db}/get").route(web::post().to(req_get)))
