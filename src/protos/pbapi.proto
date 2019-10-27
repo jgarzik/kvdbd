@@ -4,6 +4,11 @@ message KeyRequest {
   bytes key = 1;	// record key
 }
 
+message KeyResponse {
+  repeated bytes keys = 1; // list of keys
+  bool list_end = 2;	// end of list(true) or list truncated(false)
+}
+
 message UpdateRequest {
   bytes key = 1;	// record key
   bytes value = 2;	// record value, or empty, if !is_insert

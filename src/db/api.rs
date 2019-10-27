@@ -45,6 +45,11 @@ pub struct ConfigBuilder {
     pub read_only: Option<bool>,
 }
 
+pub struct KeyList {
+    pub keys: Vec<Vec<u8>>,
+    pub list_end: bool,
+}
+
 pub const MAX_ITER_KEYS: usize = 1000;
 
 pub trait Db {
@@ -53,7 +58,7 @@ pub trait Db {
     fn del(&mut self, key: &[u8]) -> Result<bool, &'static str>;
     fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>, &'static str>;
     fn put(&mut self, key: &[u8], val: &[u8]) -> Result<bool, &'static str>;
-    fn iter_keys(&self, start_key: Option<&[u8]>) -> Result<Option<Vec<Vec<u8>>>, &'static str>;
+    fn iter_keys(&self, start_key: Option<&[u8]>) -> Result<KeyList, &'static str>;
 }
 
 pub trait Driver {
@@ -117,40 +122,40 @@ mod tests {
             }
         }
 
-        fn iter_keys(
-            &self,
-            start_key: Option<&[u8]>,
-        ) -> Result<Option<Vec<Vec<u8>>>, &'static str> {
-            let mut key_list = Vec::new();
-            let mut started = false;
+        fn iter_keys(&self, start_key: Option<&[u8]>) -> Result<KeyList, &'static str> {
+            let mut key_list = KeyList {
+                keys: Vec::new(),
+                list_end: true,
+            };
+            let mut capture = false;
             for key in self.db.keys() {
-                if !started {
+                // initialize iteration
+                if !capture {
                     match start_key {
                         None => {
-                            key_list.push(key.clone());
+                            key_list.keys.push(key.clone());
                         }
                         Some(prev_key) => {
                             if &key[0..] == prev_key {
-                                started = true;
+                                capture = true;
                                 // don't push this key; caller is passing
                                 // last key seen in their previous iter()
                             }
                         }
                     }
-                } else {
-                    key_list.push(key.clone());
 
-                    if key_list.len() >= MAX_ITER_KEYS {
+                // continue iteration
+                } else {
+                    key_list.keys.push(key.clone());
+
+                    if key_list.keys.len() >= MAX_ITER_KEYS {
+                        key_list.list_end = false;
                         break;
                     }
                 }
             }
 
-            if key_list.len() == 0 {
-                return Ok(None);
-            }
-
-            Ok(Some(key_list))
+            Ok(key_list)
         }
 
         fn put(&mut self, key: &[u8], val: &[u8]) -> Result<bool, &'static str> {
@@ -289,13 +294,12 @@ mod tests {
         let key_list_res = db.iter_keys(None);
         assert_eq!(key_list_res.is_err(), false);
 
-        let key_list_opt = key_list_res.unwrap();
-        assert_eq!(key_list_opt.is_some(), true);
+        let mut key_list = key_list_res.unwrap();
+        assert_eq!(key_list.list_end, true);
 
-        let mut key_list = key_list_opt.unwrap();
-        key_list.sort();
-        assert_eq!(key_list.len(), 2);
-        assert_eq!(key_list[0], b"age");
-        assert_eq!(key_list[1], b"name");
+        key_list.keys.sort();
+        assert_eq!(key_list.keys.len(), 2);
+        assert_eq!(key_list.keys[0], b"age");
+        assert_eq!(key_list.keys[1], b"name");
     }
 }

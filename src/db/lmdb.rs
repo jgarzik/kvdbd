@@ -113,14 +113,17 @@ impl api::Db for LmdbWrapper {
         }
     }
 
-    fn iter_keys(&self, start_key: Option<&[u8]>) -> Result<Option<Vec<Vec<u8>>>, &'static str> {
+    fn iter_keys(&self, start_key: Option<&[u8]>) -> Result<api::KeyList, &'static str> {
         let res = self.env.begin_ro_txn();
         if res.is_err() {
             return Err("begin-ro-txn failed");
         }
         let txn = res.unwrap();
 
-        let mut key_list: Vec<Vec<u8>> = Vec::new();
+        let mut key_list = api::KeyList {
+            keys: Vec::new(),
+            list_end: true,
+        };
 
         {
             // extra scope, for cursor lifetime
@@ -143,8 +146,9 @@ impl api::Db for LmdbWrapper {
                     break;
                 }
                 let record_tuple = opt_val.unwrap();
-                key_list.push(record_tuple.0.to_vec());
-                if key_list.len() >= api::MAX_ITER_KEYS {
+                key_list.keys.push(record_tuple.0.to_vec());
+                if key_list.keys.len() >= api::MAX_ITER_KEYS {
+                    key_list.list_end = false;
                     break;
                 }
             }
@@ -152,11 +156,7 @@ impl api::Db for LmdbWrapper {
 
         txn.abort();
 
-        if key_list.len() == 0 {
-            return Ok(None);
-        }
-
-        Ok(Some(key_list))
+        Ok(key_list)
     }
 }
 
@@ -285,13 +285,12 @@ mod tests {
         let key_list_res = db.iter_keys(None);
         assert_eq!(key_list_res.is_err(), false);
 
-        let key_list_opt = key_list_res.unwrap();
-        assert_eq!(key_list_opt.is_some(), true);
+        let mut key_list = key_list_res.unwrap();
+        assert_eq!(key_list.list_end, true);
 
-        let mut key_list = key_list_opt.unwrap();
-        key_list.sort();
-        assert_eq!(key_list.len(), 2);
-        assert_eq!(key_list[0], b"age");
-        assert_eq!(key_list[1], b"name");
+        key_list.keys.sort();
+        assert_eq!(key_list.keys.len(), 2);
+        assert_eq!(key_list.keys[0], b"age");
+        assert_eq!(key_list.keys[1], b"name");
     }
 }

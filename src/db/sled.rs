@@ -56,7 +56,7 @@ impl api::Db for SledDb {
         }
     }
 
-    fn iter_keys(&self, start_key: Option<&[u8]>) -> Result<Option<Vec<Vec<u8>>>, &'static str> {
+    fn iter_keys(&self, start_key: Option<&[u8]>) -> Result<api::KeyList, &'static str> {
         let mut iter;
 
         if start_key.is_none() {
@@ -65,7 +65,10 @@ impl api::Db for SledDb {
             iter = self.db.range(start_key.unwrap()..);
         }
 
-        let mut key_list: Vec<Vec<u8>> = Vec::new();
+        let mut key_list = api::KeyList {
+            keys: Vec::new(),
+            list_end: true,
+        };
 
         loop {
             let opt_val = iter.next();
@@ -78,20 +81,17 @@ impl api::Db for SledDb {
                     return Err("iter failed");
                 }
                 Ok(record_tuple) => {
-                    key_list.push(record_tuple.0.to_vec());
+                    key_list.keys.push(record_tuple.0.to_vec());
                 }
             }
 
-            if key_list.len() >= api::MAX_ITER_KEYS {
+            if key_list.keys.len() >= api::MAX_ITER_KEYS {
+                key_list.list_end = false;
                 break;
             }
         }
 
-        if key_list.len() == 0 {
-            return Ok(None);
-        }
-
-        Ok(Some(key_list))
+        Ok(key_list)
     }
 }
 
@@ -214,13 +214,12 @@ mod tests {
         let key_list_res = db.iter_keys(None);
         assert_eq!(key_list_res.is_err(), false);
 
-        let key_list_opt = key_list_res.unwrap();
-        assert_eq!(key_list_opt.is_some(), true);
+        let mut key_list = key_list_res.unwrap();
+        assert_eq!(key_list.list_end, true);
 
-        let mut key_list = key_list_opt.unwrap();
-        key_list.sort();
-        assert_eq!(key_list.len(), 2);
-        assert_eq!(key_list[0], b"age");
-        assert_eq!(key_list[1], b"name");
+        key_list.keys.sort();
+        assert_eq!(key_list.keys.len(), 2);
+        assert_eq!(key_list.keys[0], b"age");
+        assert_eq!(key_list.keys[1], b"name");
     }
 }

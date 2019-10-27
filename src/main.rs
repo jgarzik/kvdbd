@@ -20,7 +20,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 use protobuf::parse_from_bytes;
-use protos::pbapi::{BatchRequest, KeyRequest, UpdateRequest};
+use protobuf::Message;
+use protos::pbapi::{BatchRequest, KeyRequest, KeyResponse, UpdateRequest};
 
 // struct used for both input (server config file) and output (server info)
 #[derive(Serialize, Deserialize, Clone)]
@@ -204,6 +205,58 @@ fn req_clear(
         Ok(_optval) => ok_json(json!({"result": true})),
         Err(_e) => err_500(), // db: error
     }
+}
+
+/// Sequential iteration through all KEYS in db. Start-key in HTTP payload.
+fn req_keys(
+    m_state: web::Data<Arc<Mutex<ServerState>>>,
+    req: HttpRequest,
+    (path, body): (web::Path<(String,)>, web::Bytes),
+) -> Result<HttpResponse> {
+    // decode protobuf msg containing key, into KeyRequest struct
+    let in_msg: KeyRequest;
+    match parse_from_bytes::<KeyRequest>(&body) {
+        Err(_e) => return err_bad_req(),
+        Ok(req) => {
+            in_msg = req;
+        }
+    }
+
+    // lock runtime-live state data
+    let state = m_state.lock().unwrap();
+    if state.debug {
+        println!("{:?}", req);
+    }
+
+    // lookup database index by name (path elem 0)
+    let idx: usize;
+    match state.name_idx.get(&path.0) {
+        None => return err_not_found(),
+        Some(r_idx) => idx = *r_idx,
+    }
+
+    // attempt to list keys, starting at supplied key (or at db-start, if none)
+    let res = state.dbs[idx]
+        .db
+        .iter_keys(match in_msg.get_key().is_empty() {
+            true => None,
+            false => Some(&in_msg.get_key()),
+        });
+    if res.is_err() {
+        return err_500();
+    }
+
+    let mut out_msg = KeyResponse::new();
+
+    let key_list = res.unwrap();
+    for key in key_list.keys {
+        out_msg.keys.push(key.clone());
+    }
+    out_msg.set_list_end(key_list.list_end);
+
+    let out_bytes: Vec<u8> = out_msg.write_to_bytes().unwrap();
+
+    ok_binary(out_bytes)
 }
 
 /// DELETE data item. key in HTTP payload.  return ok as json response
@@ -602,6 +655,7 @@ fn main() -> io::Result<()> {
             .service(web::resource("/api/{db}/batch").route(web::post().to(req_batch)))
             .service(web::resource("/api/{db}/del").route(web::post().to(req_del)))
             .service(web::resource("/api/{db}/get").route(web::post().to(req_get)))
+            .service(web::resource("/api/{db}/keys").route(web::post().to(req_keys)))
             .service(
                 web::resource("/api/{db}/obj/{key}")
                     .route(web::get().to(req_obj_get))
