@@ -117,6 +117,19 @@ if present:
 25
 ```
 
+### API: KEYS (sequential list of keys in database)
+
+Meta-request: POST http://$HOSTNAME:$PORT/api/$DB/keys
+
+Encode the last-key-from-previous-query, if any, into protobuf-encoded
+data structure `KeyRequest`, and POST the data to /api/$DB/keys path:
+```
+curl -X POST --data-binary @postdata http://localhost:8080/api/db/keys
+```
+
+Returns binary data (application/octet-stream) encoding the protobuf
+message `KeyResponse`, which lists the keys found.
+
 ### API: PUT (store key and value)
 
 Meta-request: PUT http://$HOSTNAME:$PORT/api/$DB/obj/$KEY

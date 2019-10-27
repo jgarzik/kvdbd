@@ -14,8 +14,63 @@ const T_BASEURI: &'static str = "/api";
 
 use reqwest::{Client, StatusCode};
 
+use protobuf::parse_from_bytes;
 use protobuf::Message;
-use protos::pbapi::{BatchRequest, KeyRequest, UpdateRequest};
+use protos::pbapi::{BatchRequest, KeyRequest, KeyResponse, UpdateRequest};
+
+struct KeyList {
+    keys: Vec<Vec<u8>>,
+    list_end: bool,
+}
+
+fn t_iter(client: &Client, db_id: String, start_key: Option<Vec<u8>>) -> KeyList {
+    let basepath = format!("{}{}/{}/", T_ENDPOINT, T_BASEURI, db_id);
+    let keys_url = format!("{}keys", basepath);
+
+    // encode keys request
+    let mut out_msg = KeyRequest::new();
+    match start_key {
+        None => out_msg.set_key(Vec::new()),
+        Some(s) => out_msg.set_key(s),
+    }
+    let out_bytes: Vec<u8> = out_msg.write_to_bytes().unwrap();
+
+    // exec keys request; check for successful response
+    let resp_res = client.post(&keys_url).body(out_bytes).send();
+    if resp_res.is_err() {
+        assert!(false);
+    }
+    let mut resp = resp_res.unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    // decode protobuf list-of-keys response
+    let mut body: Vec<u8> = vec![];
+    match resp.copy_to(&mut body) {
+        Err(_e) => assert!(false),
+        Ok(_o) => {}
+    }
+    let in_msg;
+    match parse_from_bytes::<KeyResponse>(&body) {
+        Err(_e) => {
+            assert!(false);
+            panic!("silence E0381 warning");
+        }
+        Ok(req) => {
+            in_msg = req;
+        }
+    }
+
+    // copy from pb struct to normal struct for returning data
+    let mut key_list: Vec<Vec<u8>> = Vec::new();
+    for key in in_msg.get_keys() {
+        key_list.push(key.clone());
+    }
+
+    KeyList {
+        keys: key_list,
+        list_end: in_msg.list_end,
+    }
+}
 
 fn t_get_gone(client: &Client, db_id: String, key: String) {
     let basepath = format!("{}{}/{}/", T_ENDPOINT, T_BASEURI, db_id);
@@ -51,6 +106,32 @@ fn t_get_ok(client: &Client, db_id: String, key: String, value: String) {
 
             match resp.text() {
                 Ok(body) => assert_eq!(body, value),
+                Err(_e) => assert!(false),
+            }
+        }
+        Err(_e) => assert!(false),
+    }
+}
+
+fn t_put_bytes(client: &Client, db_id: String, key: &[u8], value: &[u8]) {
+    let basepath = format!("{}{}/{}/", T_ENDPOINT, T_BASEURI, db_id);
+    let put_url = format!("{}put", basepath);
+
+    // encode put request
+    let mut out_msg = UpdateRequest::new();
+    out_msg.set_key(key.to_vec());
+    out_msg.set_value(value.to_vec());
+    out_msg.set_is_insert(true);
+    let out_bytes: Vec<u8> = out_msg.write_to_bytes().unwrap();
+
+    // exec put request
+    let resp_res = client.post(&put_url).body(out_bytes).send();
+    match resp_res {
+        Ok(mut resp) => {
+            assert_eq!(resp.status(), StatusCode::OK);
+
+            match resp.text() {
+                Ok(_body) => {}
                 Err(_e) => assert!(false),
             }
         }
@@ -203,6 +284,46 @@ fn op_del(client: &Client, db_id: String) {
     t_put(client, db_id.clone(), test_key.clone(), test_value);
     t_del(client, db_id.clone(), test_key.clone());
     t_del_gone(client, db_id, test_key);
+}
+
+fn op_iter(client: &Client, db_id: String) {
+    const DATA_COUNT: usize = 2001;
+    let mut vdata: Vec<Vec<u8>> = Vec::new();
+
+    // for simplicity, key==value in this test
+
+    for i in 0..DATA_COUNT {
+        let s = format!("datum {}", i);
+        vdata.push(s.as_bytes().to_vec());
+    }
+
+    for s in &vdata {
+        t_put_bytes(client, db_id.clone(), &s, &s);
+    }
+
+    let mut check_data: Vec<Vec<u8>> = Vec::new();
+
+    let mut last_key: Option<Vec<u8>> = None;
+    let mut list_end = false;
+    while !list_end {
+        let key_list = t_iter(client, db_id.clone(), last_key.clone());
+
+        for key in key_list.keys {
+            check_data.push(key.clone());
+            last_key = Some(key.clone());
+        }
+
+        list_end = key_list.list_end;
+    }
+
+    vdata.sort();
+    check_data.sort();
+
+    for i in 0..DATA_COUNT {
+        let s1 = String::from_utf8(vdata[i].clone()).unwrap();
+        let s2 = String::from_utf8(check_data[i].clone()).unwrap();
+        assert_eq!(s1, s2);
+    }
 }
 
 fn op_get(client: &Client, db_id: String) {
@@ -392,6 +513,7 @@ fn main() {
         op_obj(&client, db_id.clone());
         op_put(&client, db_id.clone());
         op_clear(&client, db_id.clone());
+        op_iter(&client, db_id.clone());
     }
     println!("Integration testing successful.");
 }
