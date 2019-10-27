@@ -3,6 +3,22 @@
 
 Connect to HTTP endpoint using any web client.
 
+## Table of Contents
+
+* [HTTP REST API](#http-rest-api)
+   * [API: Service identity and status](#api-service-identity-and-status)
+   * [API: BATCH-UPDATE - atomic update of many records](#api-batch-update---atomic-update-of-many-records)
+   * [API: CLEAR - delete all records](#api-clear---delete-all-records)
+   * [API: GET (lookup value by binary key)](#api-get-lookup-value-by-binary-key)
+   * [API: GET - lookup value by key](#api-get---lookup-value-by-key)
+   * [API: KEYS - sequential list of keys in database](#api-keys---sequential-list-of-keys-in-database)
+   * [API: KEYS.json - sequential JSON list of keys in database](#api-keysjson---sequential-json-list-of-keys-in-database)
+   * [API: PUT - store key and value](#api-put---store-key-and-value)
+   * [API: PUT - store binary key and value](#api-put---store-binary-key-and-value)
+   * [API: DELETE - remove record, based on binary key](#api-delete---remove-record-based-on-binary-key)
+   * [API: DELETE - remove record, based on key](#api-delete---remove-record-based-on-key)
+* [kvdb-pb: Protobuf encoding utility](#kvdb-pb-protobuf-encoding-utility)
+
 ## HTTP REST API
 
 The following are the operations supported by the HTTP REST API.
@@ -65,7 +81,6 @@ POST the Clear request to /api/$DB/clear path:
 curl -X POST http://localhost:8080/api/db/clear
 ```
 
-```
 Returns JSON indicating success:
 ```
 {"result":true}
