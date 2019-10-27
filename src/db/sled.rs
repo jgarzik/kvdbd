@@ -63,6 +63,7 @@ impl api::Db for SledDb {
             iter = self.db.iter();
         } else {
             iter = self.db.range(start_key.unwrap()..);
+            iter.next(); // absorb queried-for prev-key
         }
 
         let mut key_list = api::KeyList {

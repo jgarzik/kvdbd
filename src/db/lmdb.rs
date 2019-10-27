@@ -138,6 +138,7 @@ impl api::Db for LmdbWrapper {
                 it = cursor.iter_start();
             } else {
                 it = cursor.iter_from(start_key.unwrap());
+                it.next(); // absorb queried-for prev-key
             }
 
             loop {
