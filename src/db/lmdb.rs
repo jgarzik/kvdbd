@@ -1,5 +1,5 @@
 use super::api;
-use lmdb::Transaction;
+use lmdb::{Cursor, Transaction};
 use std::path::Path;
 
 pub struct LmdbWrapper {
@@ -112,6 +112,53 @@ impl api::Db for LmdbWrapper {
             }
         }
     }
+
+    fn iter_keys(&self, start_key: Option<&[u8]>) -> Result<api::KeyList, &'static str> {
+        let res = self.env.begin_ro_txn();
+        if res.is_err() {
+            return Err("begin-ro-txn failed");
+        }
+        let txn = res.unwrap();
+
+        let mut key_list = api::KeyList {
+            keys: Vec::new(),
+            list_end: true,
+        };
+
+        {
+            // extra scope, for cursor lifetime
+            let res = txn.open_ro_cursor(self.db);
+            if res.is_err() {
+                return Err("open-ro-cursor failed");
+            }
+            let mut cursor = res.unwrap();
+
+            let mut it;
+            if start_key.is_none() {
+                it = cursor.iter_start();
+            } else {
+                it = cursor.iter_from(start_key.unwrap());
+                it.next(); // absorb queried-for prev-key
+            }
+
+            loop {
+                let opt_val = it.next();
+                if opt_val.is_none() {
+                    break;
+                }
+                let record_tuple = opt_val.unwrap();
+                key_list.keys.push(record_tuple.0.to_vec());
+                if key_list.keys.len() >= api::MAX_ITER_KEYS {
+                    key_list.list_end = false;
+                    break;
+                }
+            }
+        } // end cursor scope, before we abort txn
+
+        txn.abort();
+
+        Ok(key_list)
+    }
 }
 
 pub struct LmdbDriver {}
@@ -221,5 +268,30 @@ mod tests {
         assert_eq!(db.clear(), Ok(true));
         assert_eq!(db.get(b"name"), Ok(None));
         assert_eq!(db.get(b"age"), Ok(None));
+    }
+
+    #[test]
+    fn test_iter() {
+        let tmp_dir = TempDir::new("tc").unwrap();
+        let tmp_path = tmp_dir.path().to_str().unwrap().to_string();
+        let db_config = ConfigBuilder::new().path(tmp_path).read_only(false).build();
+
+        let driver = new_driver();
+
+        let mut db = driver.start_db(db_config).unwrap();
+
+        assert_eq!(db.put(b"name", b"alan"), Ok(true));
+        assert_eq!(db.put(b"age", b"25"), Ok(true));
+
+        let key_list_res = db.iter_keys(None);
+        assert_eq!(key_list_res.is_err(), false);
+
+        let mut key_list = key_list_res.unwrap();
+        assert_eq!(key_list.list_end, true);
+
+        key_list.keys.sort();
+        assert_eq!(key_list.keys.len(), 2);
+        assert_eq!(key_list.keys[0], b"age");
+        assert_eq!(key_list.keys[1], b"name");
     }
 }

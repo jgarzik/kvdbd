@@ -55,6 +55,45 @@ impl api::Db for SledDb {
             Err(_e) => Err("batch failed"),
         }
     }
+
+    fn iter_keys(&self, start_key: Option<&[u8]>) -> Result<api::KeyList, &'static str> {
+        let mut iter;
+
+        if start_key.is_none() {
+            iter = self.db.iter();
+        } else {
+            iter = self.db.range(start_key.unwrap()..);
+            iter.next(); // absorb queried-for prev-key
+        }
+
+        let mut key_list = api::KeyList {
+            keys: Vec::new(),
+            list_end: true,
+        };
+
+        loop {
+            let opt_val = iter.next();
+            if opt_val.is_none() {
+                break;
+            }
+
+            match opt_val.unwrap() {
+                Err(_e) => {
+                    return Err("iter failed");
+                }
+                Ok(record_tuple) => {
+                    key_list.keys.push(record_tuple.0.to_vec());
+                }
+            }
+
+            if key_list.keys.len() >= api::MAX_ITER_KEYS {
+                key_list.list_end = false;
+                break;
+            }
+        }
+
+        Ok(key_list)
+    }
 }
 
 pub struct SledDriver {}
@@ -158,5 +197,30 @@ mod tests {
         assert_eq!(db.clear(), Ok(true));
         assert_eq!(db.get(b"name"), Ok(None));
         assert_eq!(db.get(b"age"), Ok(None));
+    }
+
+    #[test]
+    fn test_iter() {
+        let tmp_dir = TempDir::new("tc").unwrap();
+        let tmp_path = tmp_dir.path().to_str().unwrap().to_string();
+        let db_config = ConfigBuilder::new().path(tmp_path).read_only(false).build();
+
+        let driver = new_driver();
+
+        let mut db = driver.start_db(db_config).unwrap();
+
+        assert_eq!(db.put(b"name", b"alan"), Ok(true));
+        assert_eq!(db.put(b"age", b"25"), Ok(true));
+
+        let key_list_res = db.iter_keys(None);
+        assert_eq!(key_list_res.is_err(), false);
+
+        let mut key_list = key_list_res.unwrap();
+        assert_eq!(key_list.list_end, true);
+
+        key_list.keys.sort();
+        assert_eq!(key_list.keys.len(), 2);
+        assert_eq!(key_list.keys[0], b"age");
+        assert_eq!(key_list.keys[1], b"name");
     }
 }

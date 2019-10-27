@@ -3,19 +3,6 @@
 
 Connect to HTTP endpoint using any web client.
 
-## Table of Contents
-
-* [HTTP REST API](#http-rest-api)
-   * [API: Service identity and status](#api-service-identity-and-status)
-   * [API: BATCH-UPDATE (atomic update of many records)](#api-batch-update-atomic-update-of-many-records)
-   * [API: GET (lookup value by binary key)](#api-get-lookup-value-by-binary-key)
-   * [API: GET (lookup value by key)](#api-get-lookup-value-by-key)
-   * [API: PUT (store key and value)](#api-put-store-key-and-value)
-   * [API: PUT (store binary key and value)](#api-put-store-binary-key-and-value)
-   * [API: DELETE (remove record, based on binary key)](#api-delete-remove-record-based-on-binary-key)
-   * [API: DELETE (remove record, based on key)](#api-delete-remove-record-based-on-key)
-* [kvdb-pb: Protobuf encoding utility](#kvdb-pb-protobuf-encoding-utility)
-
 ## HTTP REST API
 
 The following are the operations supported by the HTTP REST API.
@@ -54,7 +41,7 @@ Returns JSON describing service:
 }
 ```
 
-### API: BATCH-UPDATE (atomic update of many records)
+### API: BATCH-UPDATE - atomic update of many records
 
 Meta-request: POST http://$HOSTNAME:$PORT/api/$DB/batch
 
@@ -64,6 +51,21 @@ data structure `BatchRequest`, and POST the data to /api/$DB/batch path:
 curl -X POST --data-binary @postdata http://localhost:8080/api/db/batch
 ```
 
+Returns JSON indicating success:
+```
+{"result":true}
+```
+
+### API: CLEAR - delete all records
+
+Meta-request: POST http://$HOSTNAME:$PORT/api/$DB/clear
+
+POST the Clear request to /api/$DB/clear path:
+```
+curl -X POST http://localhost:8080/api/db/clear
+```
+
+```
 Returns JSON indicating success:
 ```
 {"result":true}
@@ -85,7 +87,7 @@ if present:
 25
 ```
 
-### API: GET (lookup value by key)
+### API: GET - lookup value by key
 
 Meta-request: GET http://$HOSTNAME:$PORT/api/$DB/obj/$KEY
 
@@ -101,7 +103,34 @@ if present:
 25
 ```
 
-### API: PUT (store key and value)
+### API: KEYS - sequential list of keys in database
+
+Meta-request: POST http://$HOSTNAME:$PORT/api/$DB/keys
+
+Encode the last-key-from-previous-query, if any, into protobuf-encoded
+data structure `KeyRequest`, and POST the data to /api/$DB/keys path:
+```
+curl -X POST --data-binary @postdata http://localhost:8080/api/db/keys
+```
+
+Returns binary data (application/octet-stream) encoding the protobuf
+message `KeyResponse`, which lists the keys found.
+Maximum number of items returned per query: 1,000.
+
+### API: KEYS.json - sequential JSON list of keys in database
+
+Meta-request: GET http://$HOSTNAME:$PORT/api/$DB/keys.json[?lastkey=$LAST_KEY]
+
+Encode the last-key-from-previous-query, if any, into HTTP query string,
+GET the data from /api/$DB/keys.json path:
+```
+curl -s http://localhost:8080/api/db1/keys.json?lastkey=age
+```
+
+Returns JSON object containing a list of keys, and a continuation indicator,
+if the list was truncated.  Maximum number of items returned per query: 1,000.
+
+### API: PUT - store key and value
 
 Meta-request: PUT http://$HOSTNAME:$PORT/api/$DB/obj/$KEY
 
@@ -117,7 +146,7 @@ Returns JSON indicating success:
 {"result":true}
 ```
 
-### API: PUT (store binary key and value)
+### API: PUT - store binary key and value
 
 Meta-request: POST http://$HOSTNAME:$PORT/api/$DB/put
 
@@ -132,7 +161,7 @@ Returns JSON indicating success:
 {"result":true}
 ```
 
-### API: DELETE (remove record, based on binary key)
+### API: DELETE - remove record, based on binary key
 
 Meta-request: POST http://$HOSTNAME:$PORT/api/$DB/del
 
@@ -147,7 +176,7 @@ Returns JSON describing value found and removed (if in db):
 {"result":true}
 ```
 
-### API: DELETE (remove record, based on key)
+### API: DELETE - remove record, based on key
 
 Meta-request: DELETE http://$HOSTNAME:$PORT/api/$DB/obj/$KEY
 

@@ -45,12 +45,20 @@ pub struct ConfigBuilder {
     pub read_only: Option<bool>,
 }
 
+pub struct KeyList {
+    pub keys: Vec<Vec<u8>>,
+    pub list_end: bool,
+}
+
+pub const MAX_ITER_KEYS: usize = 1000;
+
 pub trait Db {
-    fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>, &'static str>;
-    fn put(&mut self, key: &[u8], val: &[u8]) -> Result<bool, &'static str>;
-    fn del(&mut self, key: &[u8]) -> Result<bool, &'static str>;
     fn apply_batch(&mut self, batch: &Batch) -> Result<bool, &'static str>;
     fn clear(&mut self) -> Result<bool, &'static str>;
+    fn del(&mut self, key: &[u8]) -> Result<bool, &'static str>;
+    fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>, &'static str>;
+    fn put(&mut self, key: &[u8], val: &[u8]) -> Result<bool, &'static str>;
+    fn iter_keys(&self, start_key: Option<&[u8]>) -> Result<KeyList, &'static str>;
 }
 
 pub trait Driver {
@@ -112,6 +120,42 @@ mod tests {
                 None => Ok(None),
                 Some(val) => Ok(Some(val.to_vec())),
             }
+        }
+
+        fn iter_keys(&self, start_key: Option<&[u8]>) -> Result<KeyList, &'static str> {
+            let mut key_list = KeyList {
+                keys: Vec::new(),
+                list_end: true,
+            };
+            let mut capture = false;
+            for key in self.db.keys() {
+                // initialize iteration
+                if !capture {
+                    match start_key {
+                        None => {
+                            key_list.keys.push(key.clone());
+                        }
+                        Some(prev_key) => {
+                            if &key[0..] == prev_key {
+                                capture = true;
+                                // don't push this key; caller is passing
+                                // last key seen in their previous iter()
+                            }
+                        }
+                    }
+
+                // continue iteration
+                } else {
+                    key_list.keys.push(key.clone());
+
+                    if key_list.keys.len() >= MAX_ITER_KEYS {
+                        key_list.list_end = false;
+                        break;
+                    }
+                }
+            }
+
+            Ok(key_list)
         }
 
         fn put(&mut self, key: &[u8], val: &[u8]) -> Result<bool, &'static str> {
@@ -231,5 +275,31 @@ mod tests {
         assert_eq!(db.clear(), Ok(true));
         assert_eq!(db.get(b"name"), Ok(None));
         assert_eq!(db.get(b"age"), Ok(None));
+    }
+
+    #[test]
+    fn test_iter() {
+        let db_config = ConfigBuilder::new()
+            .path("/dev/null".to_string())
+            .read_only(false)
+            .build();
+
+        let driver = new_driver();
+
+        let mut db = driver.start_db(db_config).unwrap();
+
+        assert_eq!(db.put(b"name", b"alan"), Ok(true));
+        assert_eq!(db.put(b"age", b"25"), Ok(true));
+
+        let key_list_res = db.iter_keys(None);
+        assert_eq!(key_list_res.is_err(), false);
+
+        let mut key_list = key_list_res.unwrap();
+        assert_eq!(key_list.list_end, true);
+
+        key_list.keys.sort();
+        assert_eq!(key_list.keys.len(), 2);
+        assert_eq!(key_list.keys[0], b"age");
+        assert_eq!(key_list.keys[1], b"name");
     }
 }
