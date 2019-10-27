@@ -8,6 +8,7 @@ Connect to HTTP endpoint using any web client.
 * [HTTP REST API](#http-rest-api)
    * [API: Service identity and status](#api-service-identity-and-status)
    * [API: BATCH-UPDATE (atomic update of many records)](#api-batch-update-atomic-update-of-many-records)
+   * [API: CLEAR (delete all records)](#api-clear-delete-all-records)
    * [API: GET (lookup value by binary key)](#api-get-lookup-value-by-binary-key)
    * [API: GET (lookup value by key)](#api-get-lookup-value-by-key)
    * [API: PUT (store key and value)](#api-put-store-key-and-value)
@@ -64,6 +65,21 @@ data structure `BatchRequest`, and POST the data to /api/$DB/batch path:
 curl -X POST --data-binary @postdata http://localhost:8080/api/db/batch
 ```
 
+Returns JSON indicating success:
+```
+{"result":true}
+```
+
+### API: CLEAR (delete all records)
+
+Meta-request: POST http://$HOSTNAME:$PORT/api/$DB/clear
+
+POST the Clear request to /api/$DB/clear path:
+```
+curl -X POST http://localhost:8080/api/db/clear
+```
+
+```
 Returns JSON indicating success:
 ```
 {"result":true}
