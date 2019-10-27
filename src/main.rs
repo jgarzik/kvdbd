@@ -47,6 +47,13 @@ struct ServerInfo {
     databases: Vec<DbConfig>,
 }
 
+// JSON response to KEYS API request
+#[derive(Serialize, Deserialize)]
+struct KeyResponseJson {
+    keys: Vec<String>,
+    list_end: bool,
+}
+
 // per-db runtime state info
 struct DbState {
     cfg: DbConfig,                   // imported db configuration
@@ -257,6 +264,75 @@ fn req_keys(
     let out_bytes: Vec<u8> = out_msg.write_to_bytes().unwrap();
 
     ok_binary(out_bytes)
+}
+
+/// Sequential iteration through all KEYS in db. Start-key in HTTP payload.
+fn req_keys_json(
+    m_state: web::Data<Arc<Mutex<ServerState>>>,
+    req: HttpRequest,
+    path: web::Path<(String,)>,
+) -> Result<HttpResponse> {
+    let mut lastkey: Option<Vec<u8>> = None;
+
+    // query string continues previous search
+    let qs = req.query_string();
+    if qs.find("&") != None {
+        // we only support a single key=value param
+        return err_bad_req();
+    }
+    let searchkey = "lastkey=";
+    if qs.len() > 0 {
+        if qs.len() < searchkey.len() {
+            return err_bad_req();
+        }
+        let key = &qs[0..searchkey.len()];
+        if key != searchkey {
+            return err_bad_req();
+        }
+
+        let val = &qs[searchkey.len()..];
+        lastkey = Some(val.as_bytes().to_vec());
+    }
+
+    // lock runtime-live state data
+    let state = m_state.lock().unwrap();
+    if state.debug {
+        println!("{:?}", req);
+    }
+
+    // lookup database index by name (path elem 0)
+    let idx: usize;
+    match state.name_idx.get(&path.0) {
+        None => return err_not_found(),
+        Some(r_idx) => idx = *r_idx,
+    }
+
+    // attempt to list keys, starting at supplied key (or at db-start, if none)
+    let res;
+    if lastkey.is_none() {
+        res = state.dbs[idx].db.iter_keys(None);
+    } else {
+        res = state.dbs[idx].db.iter_keys(Some(&lastkey.unwrap()));
+    }
+    if res.is_err() {
+        return err_500();
+    }
+    let key_list = res.unwrap();
+
+    // fill for-JSON-output struct with return data
+    let mut out_msg = KeyResponseJson {
+        keys: Vec::new(),
+        list_end: key_list.list_end,
+    };
+    for key in key_list.keys {
+        out_msg.keys.push(String::from_utf8_lossy(&key).to_string());
+    }
+
+    // serialize structs into json
+    let jv = serde_json::to_value(&out_msg)?;
+
+    // return json output
+    ok_json(jv)
 }
 
 /// DELETE data item. key in HTTP payload.  return ok as json response
@@ -655,6 +731,7 @@ fn main() -> io::Result<()> {
             .service(web::resource("/api/{db}/batch").route(web::post().to(req_batch)))
             .service(web::resource("/api/{db}/del").route(web::post().to(req_del)))
             .service(web::resource("/api/{db}/get").route(web::post().to(req_get)))
+            .service(web::resource("/api/{db}/keys.json").route(web::get().to(req_keys_json)))
             .service(web::resource("/api/{db}/keys").route(web::post().to(req_keys)))
             .service(
                 web::resource("/api/{db}/obj/{key}")
