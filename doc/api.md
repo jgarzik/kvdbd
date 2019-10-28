@@ -6,7 +6,7 @@ Connect to HTTP endpoint using any web client.
 ## Table of Contents
 
 * [Table of Contents](#table-of-contents)
-* [HTTP REST API - over](#http-rest-api---over)
+* [HTTP REST API - overview](#http-rest-api---over)
 * [REST/JSON API](#restjson-api)
    * [API: Service identity and status](#api-service-identity-and-status)
    * [API: CLEAR - delete all records](#api-clear---delete-all-records)
@@ -22,7 +22,7 @@ Connect to HTTP endpoint using any web client.
    * [API: DELETE - remove record, based on binary key](#api-delete---remove-record-based-on-binary-key)
 * [kvdb-pb: Protobuf encoding utility](#kvdb-pb-protobuf-encoding-utility)
 
-## HTTP REST API - over
+## HTTP REST API - overview
 
 The following are the operations supported by the HTTP REST API.
 
