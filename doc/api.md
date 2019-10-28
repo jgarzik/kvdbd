@@ -16,10 +16,10 @@ Connect to HTTP endpoint using any web client.
    * [API: PUT - store key and value](#api-put---store-key-and-value)
 * [REST/Protobufs API](#restprotobufs-api)
    * [API: BATCH-UPDATE - atomic update of many records](#api-batch-update---atomic-update-of-many-records)
+   * [API: DELETE - remove record, based on binary key](#api-delete---remove-record-based-on-binary-key)
    * [API: GET (lookup value by binary key)](#api-get-lookup-value-by-binary-key)
    * [API: KEYS - sequential list of keys in database](#api-keys---sequential-list-of-keys-in-database)
    * [API: PUT - store binary key and value](#api-put---store-binary-key-and-value)
-   * [API: DELETE - remove record, based on binary key](#api-delete---remove-record-based-on-binary-key)
 * [kvdb-pb: Protobuf encoding utility](#kvdb-pb-protobuf-encoding-utility)
 
 ## HTTP REST API - overview
@@ -156,6 +156,21 @@ Returns JSON indicating success:
 {"result":true}
 ```
 
+### API: DELETE - remove record, based on binary key
+
+Meta-request: POST http://$HOSTNAME:$PORT/api/$DB/del
+
+Encode the key into protobuf-encoded
+data structure `KeyRequest`, and POST the data to /api/$DB/del path:
+```
+curl -X POST --data-binary @postdata http://localhost:8080/api/db/del
+```
+
+Returns JSON describing value found and removed (if in db):
+```
+{"result":true}
+```
+
 ### API: GET (lookup value by binary key)
 
 Meta-request: POST http://$HOSTNAME:$PORT/api/$DB/get
@@ -197,21 +212,6 @@ curl -X POST --data-binary @postdata http://localhost:8080/api/db/put
 ```
 
 Returns JSON indicating success:
-```
-{"result":true}
-```
-
-### API: DELETE - remove record, based on binary key
-
-Meta-request: POST http://$HOSTNAME:$PORT/api/$DB/del
-
-Encode the key into protobuf-encoded
-data structure `KeyRequest`, and POST the data to /api/$DB/del path:
-```
-curl -X POST --data-binary @postdata http://localhost:8080/api/db/del
-```
-
-Returns JSON describing value found and removed (if in db):
 ```
 {"result":true}
 ```
