@@ -16,7 +16,7 @@ use reqwest::{Client, StatusCode};
 
 use protobuf::parse_from_bytes;
 use protobuf::Message;
-use protos::pbapi::{BatchRequest, KeyRequest, KeyResponse, UpdateRequest};
+use protos::pbapi::{BatchRequest, DbStatResponse, KeyRequest, KeyResponse, UpdateRequest};
 
 struct KeyList {
     keys: Vec<Vec<u8>>,
@@ -286,6 +286,43 @@ fn op_del(client: &Client, db_id: String) {
     t_del_gone(client, db_id, test_key);
 }
 
+fn op_stat(client: &Client, db_id: String) {
+    let test_key = String::from("op_stat_key1");
+    let test_value = format!("helloworld op_stat {}", db_id);
+
+    t_put(client, db_id.clone(), test_key.clone(), test_value);
+
+    let basepath = format!("{}{}/{}/", T_ENDPOINT, T_BASEURI, db_id);
+    let stat_url = format!("{}stat", basepath);
+
+    // exec db-stat request
+    let resp_res = client.get(&stat_url).send();
+    if resp_res.is_err() {
+        assert!(false);
+    }
+    let mut resp = resp_res.unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    // decode protobuf list-of-keys response
+    let mut body: Vec<u8> = vec![];
+    match resp.copy_to(&mut body) {
+        Err(_e) => assert!(false),
+        Ok(_o) => {}
+    }
+    let in_msg;
+    match parse_from_bytes::<DbStatResponse>(&body) {
+        Err(_e) => {
+            assert!(false);
+            panic!("silence E0381 warning");
+        }
+        Ok(req) => {
+            in_msg = req;
+        }
+    }
+
+    assert_eq!(in_msg.n_records, 1);
+}
+
 fn op_iter(client: &Client, db_id: String) {
     const DATA_COUNT: usize = 2001;
     let mut vdata: Vec<Vec<u8>> = Vec::new();
@@ -513,6 +550,7 @@ fn main() {
         op_obj(&client, db_id.clone());
         op_put(&client, db_id.clone());
         op_clear(&client, db_id.clone());
+        op_stat(&client, db_id.clone());
         op_iter(&client, db_id.clone());
     }
     println!("Integration testing successful.");

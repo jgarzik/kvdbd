@@ -5,8 +5,7 @@ Connect to HTTP endpoint using any web client.
 
 ## Table of Contents
 
-* [Table of Contents](#table-of-contents)
-* [HTTP REST API - overview](#http-rest-api---over)
+* [HTTP REST API - overview](#http-rest-api---overview)
 * [REST/JSON API](#restjson-api)
    * [API: Service identity and status](#api-service-identity-and-status)
    * [API: CLEAR - delete all records](#api-clear---delete-all-records)
@@ -14,12 +13,14 @@ Connect to HTTP endpoint using any web client.
    * [API: GET - lookup value by key](#api-get---lookup-value-by-key)
    * [API: KEYS.json - sequential JSON list of keys in database](#api-keysjson---sequential-json-list-of-keys-in-database)
    * [API: PUT - store key and value](#api-put---store-key-and-value)
+   * [API: STAT.json - database statistics](#api-statjson---database-statistics)
 * [REST/Protobufs API](#restprotobufs-api)
    * [API: BATCH-UPDATE - atomic update of many records](#api-batch-update---atomic-update-of-many-records)
    * [API: DELETE - remove record, based on binary key](#api-delete---remove-record-based-on-binary-key)
    * [API: GET (lookup value by binary key)](#api-get-lookup-value-by-binary-key)
    * [API: KEYS - sequential list of keys in database](#api-keys---sequential-list-of-keys-in-database)
    * [API: PUT - store binary key and value](#api-put---store-binary-key-and-value)
+   * [API: STAT - database statistics](#api-stat---database-statistics)
 * [kvdb-pb: Protobuf encoding utility](#kvdb-pb-protobuf-encoding-utility)
 
 ## HTTP REST API - overview
@@ -139,6 +140,18 @@ Returns JSON indicating success:
 {"result":true}
 ```
 
+### API: STAT.json - database statistics
+
+Meta-request: GET http://$HOSTNAME:$PORT/api/$DB/stat.json
+
+WARNING:  This requires a full db walk, for many databases.
+
+```
+curl -s http://localhost:8080/api/db1/stat.json
+```
+
+Returns JSON object containing a record count, and other db metadata.
+
 ## REST/Protobufs API
 
 ### API: BATCH-UPDATE - atomic update of many records
@@ -215,6 +228,18 @@ Returns JSON indicating success:
 ```
 {"result":true}
 ```
+
+### API: STAT - database statistics
+
+Meta-request: GET http://$HOSTNAME:$PORT/api/$DB/stat
+
+WARNING:  This requires a full db walk, for many databases.
+
+```
+curl -s http://localhost:8080/api/db1/stat
+```
+
+Returns Protobuf record containing a record count, and other db metadata.
 
 ## kvdb-pb: Protobuf encoding utility
 
