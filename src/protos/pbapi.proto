@@ -1,5 +1,9 @@
 syntax = "proto3";
 
+message DbStatResponse {
+  uint64 n_records = 1; // total db record count
+}
+
 message KeyRequest {
   bytes key = 1;	// record key
 }

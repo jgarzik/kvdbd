@@ -50,6 +50,10 @@ pub struct KeyList {
     pub list_end: bool,
 }
 
+pub struct DbStat {
+    pub n_records: u64,
+}
+
 pub const MAX_ITER_KEYS: usize = 1000;
 
 pub trait Db {
@@ -59,6 +63,7 @@ pub trait Db {
     fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>, &'static str>;
     fn put(&mut self, key: &[u8], val: &[u8]) -> Result<bool, &'static str>;
     fn iter_keys(&self, start_key: Option<&[u8]>) -> Result<KeyList, &'static str>;
+    fn stat(&self) -> Result<DbStat, &'static str>;
 }
 
 pub trait Driver {
@@ -120,6 +125,12 @@ mod tests {
                 None => Ok(None),
                 Some(val) => Ok(Some(val.to_vec())),
             }
+        }
+
+        fn stat(&self) -> Result<DbStat, &'static str> {
+            Ok(DbStat {
+                n_records: self.db.len() as u64,
+            })
         }
 
         fn iter_keys(&self, start_key: Option<&[u8]>) -> Result<KeyList, &'static str> {
@@ -275,6 +286,27 @@ mod tests {
         assert_eq!(db.clear(), Ok(true));
         assert_eq!(db.get(b"name"), Ok(None));
         assert_eq!(db.get(b"age"), Ok(None));
+    }
+
+    #[test]
+    fn test_stat() {
+        let db_config = ConfigBuilder::new()
+            .path("/dev/null".to_string())
+            .read_only(false)
+            .build();
+
+        let driver = new_driver();
+
+        let mut db = driver.start_db(db_config).unwrap();
+
+        assert_eq!(db.put(b"name1", b"alan"), Ok(true));
+        assert_eq!(db.put(b"age1", b"25"), Ok(true));
+        assert_eq!(db.put(b"name", b"alan"), Ok(true));
+        assert_eq!(db.del(b"name"), Ok(true));
+        assert_eq!(db.del(b"name"), Ok(false));
+
+        let st = db.stat().unwrap();
+        assert_eq!(st.n_records, 2);
     }
 
     #[test]

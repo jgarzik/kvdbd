@@ -21,7 +21,7 @@ use serde_json::json;
 
 use protobuf::parse_from_bytes;
 use protobuf::Message;
-use protos::pbapi::{BatchRequest, KeyRequest, KeyResponse, UpdateRequest};
+use protos::pbapi::{BatchRequest, DbStatResponse, KeyRequest, KeyResponse, UpdateRequest};
 
 // struct used for both input (server config file) and output (server info)
 #[derive(Serialize, Deserialize, Clone)]
@@ -45,6 +45,12 @@ struct ServerInfo {
     name: String,
     version: String,
     databases: Vec<DbConfig>,
+}
+
+// JSON response to stat API request
+#[derive(Serialize, Deserialize)]
+struct DbStatResponseJson {
+    n_records: String, // some JSON impl have trouble with big ints
 }
 
 // JSON response to KEYS API request
@@ -214,6 +220,79 @@ fn req_clear(
     }
 }
 
+/// Return db stats as protobuf
+fn req_stat(
+    m_state: web::Data<Arc<Mutex<ServerState>>>,
+    req: HttpRequest,
+    path: web::Path<(String,)>,
+) -> Result<HttpResponse> {
+    // lock runtime-live state data
+    let state = m_state.lock().unwrap();
+    if state.debug {
+        println!("{:?}", req);
+    }
+
+    // lookup database index by name (path elem 0)
+    let idx: usize;
+    match state.name_idx.get(&path.0) {
+        None => return err_not_found(),
+        Some(r_idx) => idx = *r_idx,
+    }
+
+    // attempt to list keys, starting at supplied key (or at db-start, if none)
+    let res = state.dbs[idx].db.stat();
+    if res.is_err() {
+        return err_500();
+    }
+    let st = res.unwrap();
+
+    // encode protobuf output to bytes
+    let mut out_msg = DbStatResponse::new();
+    out_msg.set_n_records(st.n_records);
+
+    let out_bytes: Vec<u8> = out_msg.write_to_bytes().unwrap();
+
+    ok_binary(out_bytes)
+}
+
+/// Return db stats as JSON
+fn req_stat_json(
+    m_state: web::Data<Arc<Mutex<ServerState>>>,
+    req: HttpRequest,
+    path: web::Path<(String,)>,
+) -> Result<HttpResponse> {
+    // lock runtime-live state data
+    let state = m_state.lock().unwrap();
+    if state.debug {
+        println!("{:?}", req);
+    }
+
+    // lookup database index by name (path elem 0)
+    let idx: usize;
+    match state.name_idx.get(&path.0) {
+        None => return err_not_found(),
+        Some(r_idx) => idx = *r_idx,
+    }
+
+    // attempt to list keys, starting at supplied key (or at db-start, if none)
+    let res = state.dbs[idx].db.stat();
+    if res.is_err() {
+        return err_500();
+    }
+    let st = res.unwrap();
+
+    // fill for-JSON-output struct with return data
+    let out_msg = DbStatResponseJson {
+        n_records: st.n_records.to_string(),
+    };
+
+    // serialize structs into json
+    let jv = serde_json::to_value(&out_msg)?;
+
+    // return json output
+    ok_json(jv)
+}
+
 /// Sequential iteration through all KEYS in db. Start-key in HTTP payload.
 fn req_keys(
     m_state: web::Data<Arc<Mutex<ServerState>>>,
@@ -253,6 +332,7 @@ fn req_keys(
         return err_500();
     }
 
+    // encode protobuf output to bytes
     let mut out_msg = KeyResponse::new();
 
     let key_list = res.unwrap();
@@ -727,8 +807,8 @@ fn main() -> io::Result<()> {
             .wrap(middleware::Logger::default())
             // register our routes
             .service(req_index)
-            .service(web::resource("/api/{db}/clear").route(web::post().to(req_clear)))
             .service(web::resource("/api/{db}/batch").route(web::post().to(req_batch)))
+            .service(web::resource("/api/{db}/clear").route(web::post().to(req_clear)))
             .service(web::resource("/api/{db}/del").route(web::post().to(req_del)))
             .service(web::resource("/api/{db}/get").route(web::post().to(req_get)))
             .service(web::resource("/api/{db}/keys.json").route(web::get().to(req_keys_json)))
@@ -740,6 +820,8 @@ fn main() -> io::Result<()> {
                     .route(web::delete().to(req_obj_delete)),
             )
             .service(web::resource("/api/{db}/put").route(web::post().to(req_put)))
+            .service(web::resource("/api/{db}/stat").route(web::get().to(req_stat)))
+            .service(web::resource("/api/{db}/stat.json").route(web::get().to(req_stat_json)))
             // default
             .default_service(
                 // 404 for GET request
