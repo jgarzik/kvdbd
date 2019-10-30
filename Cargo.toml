@@ -1,6 +1,6 @@
 [package]
 name = "kvdbd"
-version = "0.5.0"
+version = "0.6.0"
 authors = ["jgarzik"]
 edition = "2018"
 
