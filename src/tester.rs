@@ -6,11 +6,15 @@
  * $ cargo run --bin tester
  */
 
+extern crate clap;
 extern crate reqwest;
 mod protos;
 
 const T_ENDPOINT: &'static str = "http://127.0.0.1:8080";
 const T_BASEURI: &'static str = "/api";
+
+const APPNAME: &'static str = "kvdbd-tester";
+const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
 use reqwest::{Client, StatusCode};
 
@@ -537,6 +541,15 @@ fn op_obj(client: &Client, db_id: String) {
 }
 
 fn main() {
+    // CLI parser static setup
+    let cli_app = clap::App::new(APPNAME)
+        .version(VERSION)
+        .author("Jeff Garzik <jgarzik@pobox.com>")
+        .about("Integration tester for kvdbd");
+
+    // parse command line
+    let _cli_matches = cli_app.get_matches();
+
     // create http client
     let client = Client::new();
 
