@@ -30,18 +30,57 @@ struct KeyList {
     list_end: bool,
 }
 
-fn t_iter(client: &Client, db_id: String, start_key: Option<Vec<u8>>) -> KeyList {
-    let basepath = format!("{}{}/{}/", T_ENDPOINT, T_BASEURI, db_id);
-    let keys_url = format!("{}keys", basepath);
-
-    // encode keys request
+fn pbenc_iter_req(start_key: Option<Vec<u8>>, prefix: Option<Vec<u8>>) -> Vec<u8> {
     let mut out_msg = IterRequest::new();
     out_msg.magic = IterRequest_MagicNum::MAGIC;
     match start_key {
         None => out_msg.set_start_key(Vec::new()),
         Some(s) => out_msg.set_start_key(s),
     }
-    let out_bytes: Vec<u8> = out_msg.write_to_bytes().unwrap();
+    match prefix {
+        None => out_msg.set_prefix(Vec::new()),
+        Some(s) => out_msg.set_prefix(s),
+    }
+    return out_msg.write_to_bytes().unwrap();
+}
+
+fn pbenc_key_req(key: &[u8]) -> Vec<u8> {
+    let mut out_msg = KeyRequest::new();
+    out_msg.magic = KeyRequest_MagicNum::MAGIC;
+    out_msg.set_key(key.to_vec());
+    return out_msg.write_to_bytes().unwrap();
+}
+
+fn pbenc_update_ins(key: &[u8], val: &[u8]) -> UpdateRequest {
+    let mut out_msg = UpdateRequest::new();
+    out_msg.magic = UpdateRequest_MagicNum::MAGIC;
+    out_msg.set_key(key.to_vec());
+    out_msg.set_value(val.to_vec());
+    out_msg.set_is_insert(true);
+
+    out_msg
+}
+
+fn pbenc_update_del(key: &[u8]) -> UpdateRequest {
+    let mut out_msg = UpdateRequest::new();
+    out_msg.magic = UpdateRequest_MagicNum::MAGIC;
+    out_msg.set_key(key.to_vec());
+    out_msg.set_is_insert(false);
+
+    out_msg
+}
+
+fn pbenc_update_req(key: &[u8], val: &[u8]) -> Vec<u8> {
+    let out_msg = pbenc_update_ins(key, val);
+    return out_msg.write_to_bytes().unwrap();
+}
+
+fn t_iter(client: &Client, db_id: String, start_key: Option<Vec<u8>>) -> KeyList {
+    let basepath = format!("{}{}/{}/", T_ENDPOINT, T_BASEURI, db_id);
+    let keys_url = format!("{}keys", basepath);
+
+    // encode keys request
+    let out_bytes = pbenc_iter_req(start_key, None);
 
     // exec keys request; check for successful response
     let resp_res = client.post(&keys_url).body(out_bytes).send();
@@ -85,10 +124,7 @@ fn t_get_gone(client: &Client, db_id: String, key: String) {
     let get_url = format!("{}get", basepath);
 
     // encode verification get request
-    let mut out_msg = KeyRequest::new();
-    out_msg.magic = KeyRequest_MagicNum::MAGIC;
-    out_msg.set_key(key.as_bytes().to_vec());
-    let out_bytes: Vec<u8> = out_msg.write_to_bytes().unwrap();
+    let out_bytes = pbenc_key_req(key.as_bytes());
 
     // exec get request; key1 should not exist, following batch
     let resp_res = client.post(&get_url).body(out_bytes).send();
@@ -103,10 +139,7 @@ fn t_get_ok(client: &Client, db_id: String, key: String, value: String) {
     let get_url = format!("{}get", basepath);
 
     // encode verification get request
-    let mut out_msg = KeyRequest::new();
-    out_msg.magic = KeyRequest_MagicNum::MAGIC;
-    out_msg.set_key(key.as_bytes().to_vec());
-    let out_bytes: Vec<u8> = out_msg.write_to_bytes().unwrap();
+    let out_bytes = pbenc_key_req(key.as_bytes());
 
     // exec get request; key1 should not exist, following batch
     let resp_res = client.post(&get_url).body(out_bytes.clone()).send();
@@ -128,12 +161,7 @@ fn t_put_bytes(client: &Client, db_id: String, key: &[u8], value: &[u8]) {
     let put_url = format!("{}put", basepath);
 
     // encode put request
-    let mut out_msg = UpdateRequest::new();
-    out_msg.magic = UpdateRequest_MagicNum::MAGIC;
-    out_msg.set_key(key.to_vec());
-    out_msg.set_value(value.to_vec());
-    out_msg.set_is_insert(true);
-    let out_bytes: Vec<u8> = out_msg.write_to_bytes().unwrap();
+    let out_bytes = pbenc_update_req(key, value);
 
     // exec put request
     let resp_res = client.post(&put_url).body(out_bytes).send();
@@ -155,12 +183,7 @@ fn t_put(client: &Client, db_id: String, key: String, value: String) {
     let put_url = format!("{}put", basepath);
 
     // encode put request
-    let mut out_msg = UpdateRequest::new();
-    out_msg.magic = UpdateRequest_MagicNum::MAGIC;
-    out_msg.set_key(key.as_bytes().to_vec());
-    out_msg.set_value(value.as_bytes().to_vec());
-    out_msg.set_is_insert(true);
-    let out_bytes: Vec<u8> = out_msg.write_to_bytes().unwrap();
+    let out_bytes = pbenc_update_req(key.as_bytes(), value.as_bytes());
 
     // exec put request
     let resp_res = client.post(&put_url).body(out_bytes).send();
@@ -182,10 +205,7 @@ fn t_del(client: &Client, db_id: String, key: String) {
     let del_url = format!("{}del", basepath);
 
     // encode del request
-    let mut out_msg = KeyRequest::new();
-    out_msg.magic = KeyRequest_MagicNum::MAGIC;
-    out_msg.set_key(key.as_bytes().to_vec());
-    let out_bytes: Vec<u8> = out_msg.write_to_bytes().unwrap();
+    let out_bytes = pbenc_key_req(key.as_bytes());
 
     // exec del request
     let resp_res = client.post(&del_url).body(out_bytes).send();
@@ -207,10 +227,7 @@ fn t_del_gone(client: &Client, db_id: String, key: String) {
     let del_url = format!("{}del", basepath);
 
     // encode del request
-    let mut out_msg = KeyRequest::new();
-    out_msg.magic = KeyRequest_MagicNum::MAGIC;
-    out_msg.set_key(key.as_bytes().to_vec());
-    let out_bytes: Vec<u8> = out_msg.write_to_bytes().unwrap();
+    let out_bytes = pbenc_key_req(key.as_bytes());
 
     // exec del request
     let resp_res = client.post(&del_url).body(out_bytes).send();
@@ -239,26 +256,15 @@ fn op_batch(client: &Client, db_id: String) {
     out_msg.magic = BatchRequest_MagicNum::MAGIC;
 
     // op1: delete
-    let mut req = UpdateRequest::new();
-    req.magic = UpdateRequest_MagicNum::MAGIC;
-    req.set_key("op_batch_key1".as_bytes().to_vec());
-    req.set_is_insert(false);
+    let req = pbenc_update_del("op_batch_key1".as_bytes());
     out_msg.reqs.push(req);
 
     // op2: insert
-    let mut req = UpdateRequest::new();
-    req.magic = UpdateRequest_MagicNum::MAGIC;
-    req.set_key("op_batch_key2".as_bytes().to_vec());
-    req.set_value("op_batch_value2".as_bytes().to_vec());
-    req.set_is_insert(true);
+    let req = pbenc_update_ins("op_batch_key2".as_bytes(), "op_batch_value2".as_bytes());
     out_msg.reqs.push(req);
 
     // op3: insert
-    let mut req = UpdateRequest::new();
-    req.magic = UpdateRequest_MagicNum::MAGIC;
-    req.set_key("op_batch_key3".as_bytes().to_vec());
-    req.set_value("op_batch_value3".as_bytes().to_vec());
-    req.set_is_insert(true);
+    let req = pbenc_update_ins("op_batch_key3".as_bytes(), "op_batch_value3".as_bytes());
     out_msg.reqs.push(req);
 
     let out_bytes: Vec<u8> = out_msg.write_to_bytes().unwrap();
@@ -421,12 +427,7 @@ fn op_put(client: &Client, db_id: String) {
     let test_value = format!("helloworld op_put {}", db_id);
 
     // encode put request
-    let mut out_msg = UpdateRequest::new();
-    out_msg.magic = UpdateRequest_MagicNum::MAGIC;
-    out_msg.set_key(test_key.as_bytes().to_vec());
-    out_msg.set_value(test_value.as_bytes().to_vec());
-    out_msg.set_is_insert(true);
-    let out_bytes: Vec<u8> = out_msg.write_to_bytes().unwrap();
+    let out_bytes = pbenc_update_req(test_key.as_bytes(), test_value.as_bytes());
 
     // exec put request
     let resp_res = client.post(&put_url).body(out_bytes).send();
@@ -443,10 +444,7 @@ fn op_put(client: &Client, db_id: String) {
     }
 
     // encode verification get request
-    let mut out_msg = KeyRequest::new();
-    out_msg.magic = KeyRequest_MagicNum::MAGIC;
-    out_msg.set_key(test_key.as_bytes().to_vec());
-    let out_bytes: Vec<u8> = out_msg.write_to_bytes().unwrap();
+    let out_bytes = pbenc_key_req(test_key.as_bytes());
 
     // exec get request
     let resp_res = client.post(&get_url).body(out_bytes.clone()).send();
@@ -515,11 +513,7 @@ fn op_obj(client: &Client, db_id: String) {
 
     // Check that the record exists with the correct contents,
     // protobuf-style.
-    let mut out_msg = KeyRequest::new();
-    out_msg.magic = KeyRequest_MagicNum::MAGIC;
-    out_msg.set_key(test_key.as_bytes().to_vec());
-
-    let out_bytes: Vec<u8> = out_msg.write_to_bytes().unwrap();
+    let out_bytes = pbenc_key_req(test_key.as_bytes());
 
     let get_pb_url = format!("{}get", basepath);
     let resp_res = client.post(&get_pb_url).body(out_bytes).send();
