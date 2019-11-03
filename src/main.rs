@@ -867,7 +867,7 @@ fn main() -> io::Result<()> {
     // configure web server
     let sys = actix_rt::System::new(APPNAME);
 
-    HttpServer::new(move || {
+    let app = move || {
         App::new()
             // pass application state to each handler
             .data(Arc::clone(&srv_state))
@@ -904,10 +904,10 @@ fn main() -> io::Result<()> {
                             .to(HttpResponse::MethodNotAllowed),
                     ),
             )
-    })
-    .bind(bind_pair.to_string())?
-    .start();
+    };
 
     println!("Starting http server: {}", bind_pair);
+    HttpServer::new(app).bind(bind_pair.to_string())?.start();
+
     sys.run()
 }
