@@ -148,15 +148,12 @@ impl api::Db for LmdbWrapper {
 
         {
             // extra scope, for cursor lifetime
-            println!("DEBUG: open-ro-cursor");
             let res = txn.open_ro_cursor(self.db);
             if res.is_err() {
                 return Err("open-ro-cursor failed");
             }
-            println!("DEBUG: cursor unwrap");
             let mut cursor = res.unwrap();
 
-            println!("DEBUG: cursor start");
             let mut it;
             if opts.start_key.is_none() {
                 it = cursor.iter_start();
@@ -171,7 +168,6 @@ impl api::Db for LmdbWrapper {
             };
             let pfx_len = prefix.len();
 
-            println!("DEBUG: cursor loop");
             loop {
                 // get next record
                 let opt_val = it.next();
