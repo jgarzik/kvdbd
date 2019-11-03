@@ -19,8 +19,7 @@ use actix_web::{guard, middleware, web, App, HttpRequest, HttpResponse, HttpServ
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
-use protobuf::parse_from_bytes;
-use protobuf::Message;
+use protobuf::{parse_from_bytes, Message, ProtobufError, ProtobufResult};
 use protos::pbapi::{
     BatchRequest, BatchRequest_MagicNum, DbStatResponse, DbStatResponse_MagicNum, IterRequest,
     IterRequest_MagicNum, KeyRequest, KeyRequest_MagicNum, KeyResponse, KeyResponse_MagicNum,
@@ -173,6 +172,66 @@ fn pbenc_keys_resp(key_list: &db::api::KeyList) -> Vec<u8> {
     return out_msg.write_to_bytes().unwrap();
 }
 
+fn pbdec_iter_req(wiredata: &[u8]) -> ProtobufResult<IterRequest> {
+    match parse_from_bytes::<IterRequest>(wiredata) {
+        Err(e) => Err(e),
+        Ok(req) => {
+            if req.magic != IterRequest_MagicNum::MAGIC {
+                let wire_err = protobuf::error::WireError::Other;
+                let err = ProtobufError::WireError(wire_err);
+                Err(err)
+            } else {
+                Ok(req)
+            }
+        }
+    }
+}
+
+fn pbdec_key_req(wiredata: &[u8]) -> ProtobufResult<KeyRequest> {
+    match parse_from_bytes::<KeyRequest>(wiredata) {
+        Err(e) => Err(e),
+        Ok(req) => {
+            if req.magic != KeyRequest_MagicNum::MAGIC {
+                let wire_err = protobuf::error::WireError::Other;
+                let err = ProtobufError::WireError(wire_err);
+                Err(err)
+            } else {
+                Ok(req)
+            }
+        }
+    }
+}
+
+fn pbdec_update_req(wiredata: &[u8]) -> ProtobufResult<UpdateRequest> {
+    match parse_from_bytes::<UpdateRequest>(wiredata) {
+        Err(e) => Err(e),
+        Ok(req) => {
+            if req.magic != UpdateRequest_MagicNum::MAGIC {
+                let wire_err = protobuf::error::WireError::Other;
+                let err = ProtobufError::WireError(wire_err);
+                Err(err)
+            } else {
+                Ok(req)
+            }
+        }
+    }
+}
+
+fn pbdec_batch_req(wiredata: &[u8]) -> ProtobufResult<BatchRequest> {
+    match parse_from_bytes::<BatchRequest>(wiredata) {
+        Err(e) => Err(e),
+        Ok(req) => {
+            if req.magic != BatchRequest_MagicNum::MAGIC {
+                let wire_err = protobuf::error::WireError::Other;
+                let err = ProtobufError::WireError(wire_err);
+                Err(err)
+            } else {
+                Ok(req)
+            }
+        }
+    }
+}
+
 // helper function, success + binary response
 fn ok_binary(val: Vec<u8>) -> Result<HttpResponse> {
     Ok(HttpResponse::build(StatusCode::OK)
@@ -321,16 +380,11 @@ fn req_keys(
     (path, body): (web::Path<(String,)>, web::Bytes),
 ) -> Result<HttpResponse> {
     // decode protobuf msg containing key, into KeyRequest struct
-    let in_msg: IterRequest;
-    match parse_from_bytes::<IterRequest>(&body) {
-        Err(_e) => return err_bad_req(),
-        Ok(req) => {
-            in_msg = req;
-        }
-    }
-    if in_msg.magic != IterRequest_MagicNum::MAGIC {
+    let res = pbdec_iter_req(&body);
+    if res.is_err() {
         return err_bad_req();
     }
+    let in_msg = res.unwrap();
 
     // lock runtime-live state data
     let state = m_state.lock().unwrap();
@@ -443,16 +497,11 @@ fn req_del(
     (path, body): (web::Path<(String,)>, web::Bytes),
 ) -> Result<HttpResponse> {
     // decode protobuf msg containing key, into KeyRequest struct
-    let in_msg: KeyRequest;
-    match parse_from_bytes::<KeyRequest>(&body) {
-        Err(_e) => return err_bad_req(),
-        Ok(req) => {
-            in_msg = req;
-        }
-    }
-    if in_msg.magic != KeyRequest_MagicNum::MAGIC {
+    let res = pbdec_key_req(&body);
+    if res.is_err() {
         return err_bad_req();
     }
+    let in_msg = res.unwrap();
 
     // lock runtime-live state data
     let mut state = m_state.lock().unwrap();
@@ -542,16 +591,11 @@ fn req_get(
     (path, body): (web::Path<(String,)>, web::Bytes),
 ) -> Result<HttpResponse> {
     // decode protobuf msg containing key, into KeyRequest struct
-    let in_msg: KeyRequest;
-    match parse_from_bytes::<KeyRequest>(&body) {
-        Err(_e) => return err_bad_req(),
-        Ok(req) => {
-            in_msg = req;
-        }
-    }
-    if in_msg.magic != KeyRequest_MagicNum::MAGIC {
+    let res = pbdec_key_req(&body);
+    if res.is_err() {
         return err_bad_req();
     }
+    let in_msg = res.unwrap();
 
     // lock runtime-live state data
     let state = m_state.lock().unwrap();
@@ -583,16 +627,11 @@ fn req_batch(
     (path, body): (web::Path<(String,)>, web::Bytes),
 ) -> Result<HttpResponse> {
     // decode protobuf msg containing key/value pairs
-    let in_msg: BatchRequest;
-    match parse_from_bytes::<BatchRequest>(&body) {
-        Err(_e) => return err_bad_req(),
-        Ok(req) => {
-            in_msg = req;
-        }
-    }
-    if in_msg.magic != BatchRequest_MagicNum::MAGIC {
+    let res = pbdec_batch_req(&body);
+    if res.is_err() {
         return err_bad_req();
     }
+    let in_msg = res.unwrap();
 
     // build batch
     let mut batch = db::api::Batch::default();
@@ -661,14 +700,12 @@ fn req_put(
     (path, body): (web::Path<(String,)>, web::Bytes),
 ) -> Result<HttpResponse> {
     // decode protobuf msg containing key, into KeyRequest struct
-    let in_msg: UpdateRequest;
-    match parse_from_bytes::<UpdateRequest>(&body) {
-        Err(_e) => return err_bad_req(),
-        Ok(req) => {
-            in_msg = req;
-        }
+    let res = pbdec_update_req(&body);
+    if res.is_err() {
+        return err_bad_req();
     }
-    if in_msg.magic != UpdateRequest_MagicNum::MAGIC || !in_msg.is_insert {
+    let in_msg = res.unwrap();
+    if !in_msg.is_insert {
         return err_bad_req();
     }
 
