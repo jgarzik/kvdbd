@@ -125,17 +125,26 @@ impl api::Db for LmdbWrapper {
         }
     }
 
-    fn iter_keys(&self, start_key: Option<&[u8]>) -> Result<api::KeyList, &'static str> {
+    fn iter_keys(&self, opts: api::IterOptions) -> Result<api::KeyList, &'static str> {
+        let mut key_list = api::KeyList {
+            keys: Vec::new(),
+            list_end: true,
+        };
+
+        /*
+         * Work around lmdb-rs bug that panics when database
+         * is empty.  https://github.com/danburkert/lmdb-rs/issues/27
+         */
+        let st = self.stat()?;
+        if st.n_records == 0 {
+            return Ok(key_list);
+        }
+
         let res = self.env.begin_ro_txn();
         if res.is_err() {
             return Err("begin-ro-txn failed");
         }
         let txn = res.unwrap();
-
-        let mut key_list = api::KeyList {
-            keys: Vec::new(),
-            list_end: true,
-        };
 
         {
             // extra scope, for cursor lifetime
@@ -146,23 +155,44 @@ impl api::Db for LmdbWrapper {
             let mut cursor = res.unwrap();
 
             let mut it;
-            if start_key.is_none() {
+            if opts.start_key.is_none() {
                 it = cursor.iter_start();
             } else {
-                it = cursor.iter_from(start_key.unwrap());
+                it = cursor.iter_from(opts.start_key.unwrap());
                 it.next(); // absorb queried-for prev-key
             }
 
+            let prefix: Vec<u8> = match opts.prefix {
+                None => Vec::new(),
+                Some(value) => value,
+            };
+            let pfx_len = prefix.len();
+
             loop {
+                // get next record
                 let opt_val = it.next();
                 if opt_val.is_none() {
                     break;
                 }
                 let record_tuple = opt_val.unwrap();
-                key_list.keys.push(record_tuple.0.to_vec());
-                if key_list.keys.len() >= api::MAX_ITER_KEYS {
-                    key_list.list_end = false;
-                    break;
+                let key = record_tuple.0.to_vec();
+
+                // filter by prefix
+                let mut want_push = true;
+                if pfx_len > 0 {
+                    if key.len() < pfx_len || prefix != &key[0..pfx_len] {
+                        want_push = false;
+                    }
+                }
+
+                // add record's key to returned list
+                if want_push {
+                    key_list.keys.push(record_tuple.0.to_vec());
+
+                    if key_list.keys.len() >= api::MAX_ITER_KEYS {
+                        key_list.list_end = false;
+                        break;
+                    }
                 }
             }
         } // end cursor scope, before we abort txn
@@ -312,10 +342,21 @@ mod tests {
 
         let mut db = driver.start_db(db_config).unwrap();
 
+        // iterate empty list
+        let key_list_res = db.iter_keys(api::IterOptions::new());
+        assert_eq!(key_list_res.is_err(), false);
+
+        let mut key_list = key_list_res.unwrap();
+        assert_eq!(key_list.list_end, true);
+
+        key_list.keys.sort();
+        assert_eq!(key_list.keys.len(), 0);
+
+        // iterate small list
         assert_eq!(db.put(b"name", b"alan"), Ok(true));
         assert_eq!(db.put(b"age", b"25"), Ok(true));
 
-        let key_list_res = db.iter_keys(None);
+        let key_list_res = db.iter_keys(api::IterOptions::new());
         assert_eq!(key_list_res.is_err(), false);
 
         let mut key_list = key_list_res.unwrap();
@@ -325,5 +366,57 @@ mod tests {
         assert_eq!(key_list.keys.len(), 2);
         assert_eq!(key_list.keys[0], b"age");
         assert_eq!(key_list.keys[1], b"name");
+    }
+
+    #[test]
+    fn test_iter_prefix() {
+        let tmp_dir = TempDir::new("tc").unwrap();
+        let tmp_path = tmp_dir.path().to_str().unwrap().to_string();
+        let db_config = ConfigBuilder::new().path(tmp_path).read_only(false).build();
+
+        let driver = new_driver();
+
+        let mut db = driver.start_db(db_config).unwrap();
+
+        // iterate small list
+        assert_eq!(db.put(b"2018/name", b"alan"), Ok(true));
+        assert_eq!(db.put(b"2018/bame", b"alan"), Ok(true));
+        assert_eq!(db.put(b"2019/fame", b"alan"), Ok(true));
+        assert_eq!(db.put(b"2019/lame", b"alan"), Ok(true));
+        assert_eq!(db.put(b"2019/game", b"alan"), Ok(true));
+        assert_eq!(db.put(b"2020/tame", b"alan"), Ok(true));
+        assert_eq!(db.put(b"age", b"25"), Ok(true));
+
+        let key_list_res = db.iter_keys(api::IterOptions::new());
+        assert_eq!(key_list_res.is_err(), false);
+
+        let key_list = key_list_res.unwrap();
+        assert_eq!(key_list.list_end, true);
+        assert_eq!(key_list.keys.len(), 7);
+
+        // iterate with prefix matching
+        let mut opts = api::IterOptions::new();
+        opts.prefix(b"2019/");
+
+        let key_list_res = db.iter_keys(opts);
+        assert_eq!(key_list_res.is_err(), false);
+
+        let mut key_list = key_list_res.unwrap();
+        assert_eq!(key_list.list_end, true);
+        assert_eq!(key_list.keys.len(), 3);
+
+        key_list.keys.sort();
+        assert_eq!(
+            String::from_utf8_lossy(&key_list.keys[0]),
+            String::from("2019/fame")
+        );
+        assert_eq!(
+            String::from_utf8_lossy(&key_list.keys[1]),
+            String::from("2019/game")
+        );
+        assert_eq!(
+            String::from_utf8_lossy(&key_list.keys[2]),
+            String::from("2019/lame")
+        );
     }
 }
