@@ -322,12 +322,11 @@ fn req_keys(
     }
 
     // attempt to list keys, starting at supplied key (or at db-start, if none)
-    let res = state.dbs[idx]
-        .db
-        .iter_keys(match in_msg.get_key().is_empty() {
-            true => None,
-            false => Some(&in_msg.get_key()),
-        });
+    let mut opts = db::api::IterOptions::new();
+    if !in_msg.get_key().is_empty() {
+        opts.start(in_msg.get_key());
+    }
+    let res = state.dbs[idx].db.iter_keys(opts);
     if res.is_err() {
         return err_500();
     }
@@ -390,9 +389,11 @@ fn req_keys_json(
     // attempt to list keys, starting at supplied key (or at db-start, if none)
     let res;
     if lastkey.is_none() {
-        res = state.dbs[idx].db.iter_keys(None);
+        res = state.dbs[idx].db.iter_keys(db::api::IterOptions::new());
     } else {
-        res = state.dbs[idx].db.iter_keys(Some(&lastkey.unwrap()));
+        let mut opts = db::api::IterOptions::new();
+        opts.start(&lastkey.unwrap());
+        res = state.dbs[idx].db.iter_keys(opts);
     }
     if res.is_err() {
         return err_500();

@@ -62,13 +62,16 @@ impl api::Db for SledDb {
         }
     }
 
-    fn iter_keys(&self, start_key: Option<&[u8]>) -> Result<api::KeyList, &'static str> {
+    fn iter_keys(&self, opts: api::IterOptions) -> Result<api::KeyList, &'static str> {
         let mut iter;
 
-        if start_key.is_none() {
+        // todo: use self.db.scan_prefix() to narrow search,
+        // when prefix is present.  The trade-off:  when using
+        // scan_prefix(), we cannot jump directly to the start key.
+        if opts.start_key.is_none() {
             iter = self.db.iter();
         } else {
-            iter = self.db.range(start_key.unwrap()..);
+            iter = self.db.range(opts.start_key.unwrap()..);
             iter.next(); // absorb queried-for prev-key
         }
 
@@ -76,6 +79,12 @@ impl api::Db for SledDb {
             keys: Vec::new(),
             list_end: true,
         };
+
+        let prefix: Vec<u8> = match opts.prefix {
+            None => Vec::new(),
+            Some(value) => value,
+        };
+        let pfx_len = prefix.len();
 
         loop {
             let opt_val = iter.next();
@@ -88,7 +97,19 @@ impl api::Db for SledDb {
                     return Err("iter failed");
                 }
                 Ok(record_tuple) => {
-                    key_list.keys.push(record_tuple.0.to_vec());
+                    let key = record_tuple.0.to_vec();
+
+                    // filter by prefix
+                    let mut want_push = true;
+                    if pfx_len > 0 {
+                        if key.len() < pfx_len || prefix != &key[0..pfx_len] {
+                            want_push = false;
+                        }
+                    }
+
+                    if want_push {
+                        key_list.keys.push(key);
+                    }
                 }
             }
 
@@ -235,10 +256,21 @@ mod tests {
 
         let mut db = driver.start_db(db_config).unwrap();
 
+        // iterate empty list
+        let key_list_res = db.iter_keys(api::IterOptions::new());
+        assert_eq!(key_list_res.is_err(), false);
+
+        let mut key_list = key_list_res.unwrap();
+        assert_eq!(key_list.list_end, true);
+
+        key_list.keys.sort();
+        assert_eq!(key_list.keys.len(), 0);
+
+        // iterate small list
         assert_eq!(db.put(b"name", b"alan"), Ok(true));
         assert_eq!(db.put(b"age", b"25"), Ok(true));
 
-        let key_list_res = db.iter_keys(None);
+        let key_list_res = db.iter_keys(api::IterOptions::new());
         assert_eq!(key_list_res.is_err(), false);
 
         let mut key_list = key_list_res.unwrap();
@@ -248,5 +280,57 @@ mod tests {
         assert_eq!(key_list.keys.len(), 2);
         assert_eq!(key_list.keys[0], b"age");
         assert_eq!(key_list.keys[1], b"name");
+    }
+
+    #[test]
+    fn test_iter_prefix() {
+        let tmp_dir = TempDir::new("tc").unwrap();
+        let tmp_path = tmp_dir.path().to_str().unwrap().to_string();
+        let db_config = ConfigBuilder::new().path(tmp_path).read_only(false).build();
+
+        let driver = new_driver();
+
+        let mut db = driver.start_db(db_config).unwrap();
+
+        // iterate small list
+        assert_eq!(db.put(b"2018/name", b"alan"), Ok(true));
+        assert_eq!(db.put(b"2018/bame", b"alan"), Ok(true));
+        assert_eq!(db.put(b"2019/fame", b"alan"), Ok(true));
+        assert_eq!(db.put(b"2019/lame", b"alan"), Ok(true));
+        assert_eq!(db.put(b"2019/game", b"alan"), Ok(true));
+        assert_eq!(db.put(b"2020/tame", b"alan"), Ok(true));
+        assert_eq!(db.put(b"age", b"25"), Ok(true));
+
+        let key_list_res = db.iter_keys(api::IterOptions::new());
+        assert_eq!(key_list_res.is_err(), false);
+
+        let key_list = key_list_res.unwrap();
+        assert_eq!(key_list.list_end, true);
+        assert_eq!(key_list.keys.len(), 7);
+
+        // iterate with prefix matching
+        let mut opts = api::IterOptions::new();
+        opts.prefix(b"2019/");
+
+        let key_list_res = db.iter_keys(opts);
+        assert_eq!(key_list_res.is_err(), false);
+
+        let mut key_list = key_list_res.unwrap();
+        assert_eq!(key_list.list_end, true);
+        assert_eq!(key_list.keys.len(), 3);
+
+        key_list.keys.sort();
+        assert_eq!(
+            String::from_utf8_lossy(&key_list.keys[0]),
+            String::from("2019/fame")
+        );
+        assert_eq!(
+            String::from_utf8_lossy(&key_list.keys[1]),
+            String::from("2019/game")
+        );
+        assert_eq!(
+            String::from_utf8_lossy(&key_list.keys[2]),
+            String::from("2019/lame")
+        );
     }
 }

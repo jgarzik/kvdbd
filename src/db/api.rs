@@ -40,14 +40,35 @@ pub struct Config {
     pub read_only: bool,
 }
 
-pub struct ConfigBuilder {
-    pub path: Option<String>,
-    pub read_only: Option<bool>,
-}
-
 pub struct KeyList {
     pub keys: Vec<Vec<u8>>,
     pub list_end: bool,
+}
+
+pub struct IterOptions {
+    pub start_key: Option<Vec<u8>>,
+    pub prefix: Option<Vec<u8>>,
+}
+
+impl IterOptions {
+    pub fn new() -> IterOptions {
+        IterOptions {
+            start_key: None,
+            prefix: None,
+        }
+    }
+
+    pub fn start(&mut self, key: &[u8]) -> &mut IterOptions {
+        self.start_key = Some(key.to_vec());
+
+        self
+    }
+
+    pub fn prefix(&mut self, prefix: &[u8]) -> &mut IterOptions {
+        self.prefix = Some(prefix.to_vec());
+
+        self
+    }
 }
 
 pub struct DbStat {
@@ -62,12 +83,17 @@ pub trait Db {
     fn del(&mut self, key: &[u8]) -> Result<bool, &'static str>;
     fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>, &'static str>;
     fn put(&mut self, key: &[u8], val: &[u8]) -> Result<bool, &'static str>;
-    fn iter_keys(&self, start_key: Option<&[u8]>) -> Result<KeyList, &'static str>;
+    fn iter_keys(&self, opts: IterOptions) -> Result<KeyList, &'static str>;
     fn stat(&self) -> Result<DbStat, &'static str>;
 }
 
 pub trait Driver {
     fn start_db(&self, cfg: Config) -> Result<Box<dyn Db + Send>, &'static str>;
+}
+
+pub struct ConfigBuilder {
+    pub path: Option<String>,
+    pub read_only: Option<bool>,
 }
 
 impl ConfigBuilder {
@@ -133,36 +159,49 @@ mod tests {
             })
         }
 
-        fn iter_keys(&self, start_key: Option<&[u8]>) -> Result<KeyList, &'static str> {
+        fn iter_keys(&self, opts: IterOptions) -> Result<KeyList, &'static str> {
             let mut key_list = KeyList {
                 keys: Vec::new(),
                 list_end: true,
             };
-            let mut capture = false;
+
+            let prefix: Vec<u8> = match opts.prefix {
+                None => Vec::new(),
+                Some(value) => value,
+            };
+            let pfx_len = prefix.len();
+
+            let start_key: Vec<u8> = match opts.start_key {
+                None => Vec::new(),
+                Some(value) => value,
+            };
+            let have_start_key: bool = start_key.len() > 0;
+
+            let mut capture = !have_start_key;
             for key in self.db.keys() {
+                // handle prefix-only iteration; skip if no match
+                if pfx_len > 0 {
+                    if key.len() < pfx_len || prefix != &key[0..pfx_len] {
+                        continue;
+                    }
+                }
+
                 // initialize iteration
                 if !capture {
-                    match start_key {
-                        None => {
-                            key_list.keys.push(key.clone());
-                        }
-                        Some(prev_key) => {
-                            if &key[0..] == prev_key {
-                                capture = true;
-                                // don't push this key; caller is passing
-                                // last key seen in their previous iter()
-                            }
-                        }
+                    if start_key == &key[0..] {
+                        capture = true;
+                        // don't push this key; caller is passing
+                        // last key seen in their previous iter()
                     }
 
                 // continue iteration
                 } else {
                     key_list.keys.push(key.clone());
+                }
 
-                    if key_list.keys.len() >= MAX_ITER_KEYS {
-                        key_list.list_end = false;
-                        break;
-                    }
+                if key_list.keys.len() >= MAX_ITER_KEYS {
+                    key_list.list_end = false;
+                    break;
                 }
             }
 
@@ -320,10 +359,21 @@ mod tests {
 
         let mut db = driver.start_db(db_config).unwrap();
 
+        // iterate empty list
+        let key_list_res = db.iter_keys(IterOptions::new());
+        assert_eq!(key_list_res.is_err(), false);
+
+        let mut key_list = key_list_res.unwrap();
+        assert_eq!(key_list.list_end, true);
+
+        key_list.keys.sort();
+        assert_eq!(key_list.keys.len(), 0);
+
+        // iterate small list
         assert_eq!(db.put(b"name", b"alan"), Ok(true));
         assert_eq!(db.put(b"age", b"25"), Ok(true));
 
-        let key_list_res = db.iter_keys(None);
+        let key_list_res = db.iter_keys(IterOptions::new());
         assert_eq!(key_list_res.is_err(), false);
 
         let mut key_list = key_list_res.unwrap();
@@ -333,5 +383,58 @@ mod tests {
         assert_eq!(key_list.keys.len(), 2);
         assert_eq!(key_list.keys[0], b"age");
         assert_eq!(key_list.keys[1], b"name");
+    }
+
+    #[test]
+    fn test_iter_prefix() {
+        let db_config = ConfigBuilder::new()
+            .path("/dev/null".to_string())
+            .read_only(false)
+            .build();
+
+        let driver = new_driver();
+
+        let mut db = driver.start_db(db_config).unwrap();
+
+        // iterate small list
+        assert_eq!(db.put(b"2018/name", b"alan"), Ok(true));
+        assert_eq!(db.put(b"2018/bame", b"alan"), Ok(true));
+        assert_eq!(db.put(b"2019/fame", b"alan"), Ok(true));
+        assert_eq!(db.put(b"2019/lame", b"alan"), Ok(true));
+        assert_eq!(db.put(b"2019/game", b"alan"), Ok(true));
+        assert_eq!(db.put(b"2020/tame", b"alan"), Ok(true));
+        assert_eq!(db.put(b"age", b"25"), Ok(true));
+
+        let key_list_res = db.iter_keys(IterOptions::new());
+        assert_eq!(key_list_res.is_err(), false);
+
+        let key_list = key_list_res.unwrap();
+        assert_eq!(key_list.list_end, true);
+        assert_eq!(key_list.keys.len(), 7);
+
+        // iterate with prefix matching
+        let mut opts = IterOptions::new();
+        opts.prefix(b"2019/");
+
+        let key_list_res = db.iter_keys(opts);
+        assert_eq!(key_list_res.is_err(), false);
+
+        let mut key_list = key_list_res.unwrap();
+        assert_eq!(key_list.list_end, true);
+        assert_eq!(key_list.keys.len(), 3);
+
+        key_list.keys.sort();
+        assert_eq!(
+            String::from_utf8_lossy(&key_list.keys[0]),
+            String::from("2019/fame")
+        );
+        assert_eq!(
+            String::from_utf8_lossy(&key_list.keys[1]),
+            String::from("2019/game")
+        );
+        assert_eq!(
+            String::from_utf8_lossy(&key_list.keys[2]),
+            String::from("2019/lame")
+        );
     }
 }
