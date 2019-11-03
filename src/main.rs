@@ -153,6 +153,26 @@ fn err_500() -> Result<HttpResponse> {
         ))
 }
 
+fn pbenc_db_stat_resp(n_records: u64) -> Vec<u8> {
+    let mut out_msg = DbStatResponse::new();
+    out_msg.magic = DbStatResponse_MagicNum::MAGIC;
+    out_msg.set_n_records(n_records);
+
+    return out_msg.write_to_bytes().unwrap();
+}
+
+fn pbenc_keys_resp(key_list: &db::api::KeyList) -> Vec<u8> {
+    let mut out_msg = KeyResponse::new();
+    out_msg.magic = KeyResponse_MagicNum::MAGIC;
+
+    for key in &key_list.keys {
+        out_msg.keys.push(key.clone());
+    }
+    out_msg.set_list_end(key_list.list_end);
+
+    return out_msg.write_to_bytes().unwrap();
+}
+
 // helper function, success + binary response
 fn ok_binary(val: Vec<u8>) -> Result<HttpResponse> {
     Ok(HttpResponse::build(StatusCode::OK)
@@ -251,11 +271,7 @@ fn req_stat(
     let st = res.unwrap();
 
     // encode protobuf output to bytes
-    let mut out_msg = DbStatResponse::new();
-    out_msg.magic = DbStatResponse_MagicNum::MAGIC;
-    out_msg.set_n_records(st.n_records);
-
-    let out_bytes: Vec<u8> = out_msg.write_to_bytes().unwrap();
+    let out_bytes = pbenc_db_stat_resp(st.n_records);
 
     ok_binary(out_bytes)
 }
@@ -343,16 +359,8 @@ fn req_keys(
     }
 
     // encode protobuf output to bytes
-    let mut out_msg = KeyResponse::new();
-    out_msg.magic = KeyResponse_MagicNum::MAGIC;
-
     let key_list = res.unwrap();
-    for key in key_list.keys {
-        out_msg.keys.push(key.clone());
-    }
-    out_msg.set_list_end(key_list.list_end);
-
-    let out_bytes: Vec<u8> = out_msg.write_to_bytes().unwrap();
+    let out_bytes = pbenc_keys_resp(&key_list);
 
     ok_binary(out_bytes)
 }
