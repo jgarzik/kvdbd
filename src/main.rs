@@ -22,7 +22,9 @@ use serde_json::json;
 use protobuf::parse_from_bytes;
 use protobuf::Message;
 use protos::pbapi::{
-    BatchRequest, DbStatResponse, IterRequest, KeyRequest, KeyResponse, UpdateRequest,
+    BatchRequest, BatchRequest_MagicNum, DbStatResponse, DbStatResponse_MagicNum, IterRequest,
+    IterRequest_MagicNum, KeyRequest, KeyRequest_MagicNum, KeyResponse, KeyResponse_MagicNum,
+    UpdateRequest, UpdateRequest_MagicNum,
 };
 
 // struct used for both input (server config file) and output (server info)
@@ -250,6 +252,7 @@ fn req_stat(
 
     // encode protobuf output to bytes
     let mut out_msg = DbStatResponse::new();
+    out_msg.magic = DbStatResponse_MagicNum::MAGIC;
     out_msg.set_n_records(st.n_records);
 
     let out_bytes: Vec<u8> = out_msg.write_to_bytes().unwrap();
@@ -309,6 +312,9 @@ fn req_keys(
             in_msg = req;
         }
     }
+    if in_msg.magic != IterRequest_MagicNum::MAGIC {
+        return err_bad_req();
+    }
 
     // lock runtime-live state data
     let state = m_state.lock().unwrap();
@@ -338,6 +344,7 @@ fn req_keys(
 
     // encode protobuf output to bytes
     let mut out_msg = KeyResponse::new();
+    out_msg.magic = KeyResponse_MagicNum::MAGIC;
 
     let key_list = res.unwrap();
     for key in key_list.keys {
@@ -435,6 +442,9 @@ fn req_del(
             in_msg = req;
         }
     }
+    if in_msg.magic != KeyRequest_MagicNum::MAGIC {
+        return err_bad_req();
+    }
 
     // lock runtime-live state data
     let mut state = m_state.lock().unwrap();
@@ -531,6 +541,9 @@ fn req_get(
             in_msg = req;
         }
     }
+    if in_msg.magic != KeyRequest_MagicNum::MAGIC {
+        return err_bad_req();
+    }
 
     // lock runtime-live state data
     let state = m_state.lock().unwrap();
@@ -569,11 +582,17 @@ fn req_batch(
             in_msg = req;
         }
     }
+    if in_msg.magic != BatchRequest_MagicNum::MAGIC {
+        return err_bad_req();
+    }
 
     // build batch
     let mut batch = db::api::Batch::default();
     let updates = in_msg.reqs.to_vec();
     for update in &updates {
+        if update.magic != UpdateRequest_MagicNum::MAGIC {
+            return err_bad_req();
+        }
         if update.is_insert {
             batch.insert(&update.key, &update.value);
         } else {
@@ -641,7 +660,7 @@ fn req_put(
             in_msg = req;
         }
     }
-    if !in_msg.is_insert {
+    if in_msg.magic != UpdateRequest_MagicNum::MAGIC || !in_msg.is_insert {
         return err_bad_req();
     }
 

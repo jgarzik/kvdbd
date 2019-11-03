@@ -21,7 +21,8 @@ use reqwest::{Client, StatusCode};
 use protobuf::parse_from_bytes;
 use protobuf::Message;
 use protos::pbapi::{
-    BatchRequest, DbStatResponse, IterRequest, KeyRequest, KeyResponse, UpdateRequest,
+    BatchRequest, BatchRequest_MagicNum, DbStatResponse, IterRequest, IterRequest_MagicNum,
+    KeyRequest, KeyRequest_MagicNum, KeyResponse, UpdateRequest, UpdateRequest_MagicNum,
 };
 
 struct KeyList {
@@ -35,6 +36,7 @@ fn t_iter(client: &Client, db_id: String, start_key: Option<Vec<u8>>) -> KeyList
 
     // encode keys request
     let mut out_msg = IterRequest::new();
+    out_msg.magic = IterRequest_MagicNum::MAGIC;
     match start_key {
         None => out_msg.set_start_key(Vec::new()),
         Some(s) => out_msg.set_start_key(s),
@@ -84,6 +86,7 @@ fn t_get_gone(client: &Client, db_id: String, key: String) {
 
     // encode verification get request
     let mut out_msg = KeyRequest::new();
+    out_msg.magic = KeyRequest_MagicNum::MAGIC;
     out_msg.set_key(key.as_bytes().to_vec());
     let out_bytes: Vec<u8> = out_msg.write_to_bytes().unwrap();
 
@@ -101,6 +104,7 @@ fn t_get_ok(client: &Client, db_id: String, key: String, value: String) {
 
     // encode verification get request
     let mut out_msg = KeyRequest::new();
+    out_msg.magic = KeyRequest_MagicNum::MAGIC;
     out_msg.set_key(key.as_bytes().to_vec());
     let out_bytes: Vec<u8> = out_msg.write_to_bytes().unwrap();
 
@@ -125,6 +129,7 @@ fn t_put_bytes(client: &Client, db_id: String, key: &[u8], value: &[u8]) {
 
     // encode put request
     let mut out_msg = UpdateRequest::new();
+    out_msg.magic = UpdateRequest_MagicNum::MAGIC;
     out_msg.set_key(key.to_vec());
     out_msg.set_value(value.to_vec());
     out_msg.set_is_insert(true);
@@ -151,6 +156,7 @@ fn t_put(client: &Client, db_id: String, key: String, value: String) {
 
     // encode put request
     let mut out_msg = UpdateRequest::new();
+    out_msg.magic = UpdateRequest_MagicNum::MAGIC;
     out_msg.set_key(key.as_bytes().to_vec());
     out_msg.set_value(value.as_bytes().to_vec());
     out_msg.set_is_insert(true);
@@ -177,6 +183,7 @@ fn t_del(client: &Client, db_id: String, key: String) {
 
     // encode del request
     let mut out_msg = KeyRequest::new();
+    out_msg.magic = KeyRequest_MagicNum::MAGIC;
     out_msg.set_key(key.as_bytes().to_vec());
     let out_bytes: Vec<u8> = out_msg.write_to_bytes().unwrap();
 
@@ -201,6 +208,7 @@ fn t_del_gone(client: &Client, db_id: String, key: String) {
 
     // encode del request
     let mut out_msg = KeyRequest::new();
+    out_msg.magic = KeyRequest_MagicNum::MAGIC;
     out_msg.set_key(key.as_bytes().to_vec());
     let out_bytes: Vec<u8> = out_msg.write_to_bytes().unwrap();
 
@@ -228,15 +236,18 @@ fn op_batch(client: &Client, db_id: String) {
     t_put(client, db_id.clone(), test_key.clone(), test_value);
 
     let mut out_msg = BatchRequest::new();
+    out_msg.magic = BatchRequest_MagicNum::MAGIC;
 
     // op1: delete
     let mut req = UpdateRequest::new();
+    req.magic = UpdateRequest_MagicNum::MAGIC;
     req.set_key("op_batch_key1".as_bytes().to_vec());
     req.set_is_insert(false);
     out_msg.reqs.push(req);
 
     // op2: insert
     let mut req = UpdateRequest::new();
+    req.magic = UpdateRequest_MagicNum::MAGIC;
     req.set_key("op_batch_key2".as_bytes().to_vec());
     req.set_value("op_batch_value2".as_bytes().to_vec());
     req.set_is_insert(true);
@@ -244,6 +255,7 @@ fn op_batch(client: &Client, db_id: String) {
 
     // op3: insert
     let mut req = UpdateRequest::new();
+    req.magic = UpdateRequest_MagicNum::MAGIC;
     req.set_key("op_batch_key3".as_bytes().to_vec());
     req.set_value("op_batch_value3".as_bytes().to_vec());
     req.set_is_insert(true);
@@ -410,6 +422,7 @@ fn op_put(client: &Client, db_id: String) {
 
     // encode put request
     let mut out_msg = UpdateRequest::new();
+    out_msg.magic = UpdateRequest_MagicNum::MAGIC;
     out_msg.set_key(test_key.as_bytes().to_vec());
     out_msg.set_value(test_value.as_bytes().to_vec());
     out_msg.set_is_insert(true);
@@ -431,6 +444,7 @@ fn op_put(client: &Client, db_id: String) {
 
     // encode verification get request
     let mut out_msg = KeyRequest::new();
+    out_msg.magic = KeyRequest_MagicNum::MAGIC;
     out_msg.set_key(test_key.as_bytes().to_vec());
     let out_bytes: Vec<u8> = out_msg.write_to_bytes().unwrap();
 
@@ -502,6 +516,7 @@ fn op_obj(client: &Client, db_id: String) {
     // Check that the record exists with the correct contents,
     // protobuf-style.
     let mut out_msg = KeyRequest::new();
+    out_msg.magic = KeyRequest_MagicNum::MAGIC;
     out_msg.set_key(test_key.as_bytes().to_vec());
 
     let out_bytes: Vec<u8> = out_msg.write_to_bytes().unwrap();
