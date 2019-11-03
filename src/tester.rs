@@ -20,7 +20,9 @@ use reqwest::{Client, StatusCode};
 
 use protobuf::parse_from_bytes;
 use protobuf::Message;
-use protos::pbapi::{BatchRequest, DbStatResponse, KeyRequest, KeyResponse, UpdateRequest};
+use protos::pbapi::{
+    BatchRequest, DbStatResponse, IterRequest, KeyRequest, KeyResponse, UpdateRequest,
+};
 
 struct KeyList {
     keys: Vec<Vec<u8>>,
@@ -32,10 +34,10 @@ fn t_iter(client: &Client, db_id: String, start_key: Option<Vec<u8>>) -> KeyList
     let keys_url = format!("{}keys", basepath);
 
     // encode keys request
-    let mut out_msg = KeyRequest::new();
+    let mut out_msg = IterRequest::new();
     match start_key {
-        None => out_msg.set_key(Vec::new()),
-        Some(s) => out_msg.set_key(s),
+        None => out_msg.set_start_key(Vec::new()),
+        Some(s) => out_msg.set_start_key(s),
     }
     let out_bytes: Vec<u8> = out_msg.write_to_bytes().unwrap();
 

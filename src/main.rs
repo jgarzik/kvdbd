@@ -21,7 +21,9 @@ use serde_json::json;
 
 use protobuf::parse_from_bytes;
 use protobuf::Message;
-use protos::pbapi::{BatchRequest, DbStatResponse, KeyRequest, KeyResponse, UpdateRequest};
+use protos::pbapi::{
+    BatchRequest, DbStatResponse, IterRequest, KeyRequest, KeyResponse, UpdateRequest,
+};
 
 // struct used for both input (server config file) and output (server info)
 #[derive(Serialize, Deserialize, Clone)]
@@ -300,8 +302,8 @@ fn req_keys(
     (path, body): (web::Path<(String,)>, web::Bytes),
 ) -> Result<HttpResponse> {
     // decode protobuf msg containing key, into KeyRequest struct
-    let in_msg: KeyRequest;
-    match parse_from_bytes::<KeyRequest>(&body) {
+    let in_msg: IterRequest;
+    match parse_from_bytes::<IterRequest>(&body) {
         Err(_e) => return err_bad_req(),
         Ok(req) => {
             in_msg = req;
@@ -323,8 +325,11 @@ fn req_keys(
 
     // attempt to list keys, starting at supplied key (or at db-start, if none)
     let mut opts = db::api::IterOptions::new();
-    if !in_msg.get_key().is_empty() {
-        opts.start(in_msg.get_key());
+    if !in_msg.start_key.is_empty() {
+        opts.start(&in_msg.start_key);
+    }
+    if !in_msg.prefix.is_empty() {
+        opts.prefix(&in_msg.prefix);
     }
     let res = state.dbs[idx].db.iter_keys(opts);
     if res.is_err() {

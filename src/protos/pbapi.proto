@@ -8,6 +8,11 @@ message KeyRequest {
   bytes key = 1;	// record key
 }
 
+message IterRequest {
+  bytes start_key = 1;	// empty=start iteration. else=continue iter @ key
+  bytes prefix = 2;	// limit results to records with keys matching prefix
+}
+
 message KeyResponse {
   repeated bytes keys = 1; // list of keys
   bool list_end = 2;	// end of list(true) or list truncated(false)
