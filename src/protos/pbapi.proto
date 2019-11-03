@@ -1,30 +1,66 @@
 syntax = "proto3";
 
 message DbStatResponse {
-  uint64 n_records = 1; // total db record count
+  enum MagicNum {
+    INVALID = 0;
+    MAGIC = 11223344;
+  }
+  MagicNum magic = 1;
+
+  uint64 n_records = 2; // total db record count
 }
 
 message KeyRequest {
-  bytes key = 1;	// record key
+  enum MagicNum {
+    INVALID = 0;
+    MAGIC = 22334455;
+  }
+  MagicNum magic = 1;
+
+  bytes key = 2;	// record key
 }
 
 message IterRequest {
-  bytes start_key = 1;	// empty=start iteration. else=continue iter @ key
-  bytes prefix = 2;	// limit results to records with keys matching prefix
+  enum MagicNum {
+    INVALID = 0;
+    MAGIC = 33445566;
+  }
+  MagicNum magic = 1;
+
+  bytes start_key = 2;	// empty=start iteration. else=continue iter @ key
+  bytes prefix = 3;	// limit results to records with keys matching prefix
 }
 
 message KeyResponse {
-  repeated bytes keys = 1; // list of keys
-  bool list_end = 2;	// end of list(true) or list truncated(false)
+  enum MagicNum {
+    INVALID = 0;
+    MAGIC = 44556677;
+  }
+  MagicNum magic = 1;
+
+  repeated bytes keys = 2; // list of keys
+  bool list_end = 3;	// end of list(true) or list truncated(false)
 }
 
 message UpdateRequest {
-  bytes key = 1;	// record key
-  bytes value = 2;	// record value, or empty, if !is_insert
-  bool is_insert = 3;	// insert(true) or remove(false)
+  enum MagicNum {
+    INVALID = 0;
+    MAGIC = 55667788;
+  }
+  MagicNum magic = 1;
+
+  bytes key = 2;	// record key
+  bytes value = 3;	// record value, or empty, if !is_insert
+  bool is_insert = 4;	// insert(true) or remove(false)
 }
 
 message BatchRequest {
-  repeated UpdateRequest reqs = 1; // list of insert/remove operations
+  enum MagicNum {
+    INVALID = 0;
+    MAGIC = 66778899;
+  }
+  MagicNum magic = 1;
+
+  repeated UpdateRequest reqs = 2; // list of insert/remove operations
 }
 
