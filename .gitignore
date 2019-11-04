@@ -3,4 +3,5 @@
 
 cfg-kvdbd.json
 db*.kv/
+tls-*.pem
 
