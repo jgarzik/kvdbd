@@ -16,6 +16,7 @@ use std::{env, fs, io, process};
 
 use actix_web::http::StatusCode;
 use actix_web::{guard, middleware, web, App, HttpRequest, HttpResponse, HttpServer, Result};
+use openssl::ssl::{SslAcceptor, SslFiletype, SslMethod};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
@@ -35,10 +36,26 @@ struct DbConfig {
     read_only: bool,
 }
 
+#[derive(Serialize, Deserialize)]
+struct SslConfig {
+    private_key_path: String, // empty, if no SSL
+    cert_chain_path: String,  // empty, if no SSL
+}
+
+impl SslConfig {
+    fn new() -> SslConfig {
+        SslConfig {
+            private_key_path: String::new(),
+            cert_chain_path: String::new(),
+        }
+    }
+}
+
 // top-level schema for server configuration file
 #[derive(Serialize, Deserialize)]
 struct ServerConfig {
     debug: bool,
+    ssl: SslConfig,
     databases: Vec<DbConfig>,
 }
 
@@ -807,6 +824,7 @@ fn main() -> io::Result<()> {
     let mut zeroconf = false;
     let mut server_cfg = ServerConfig {
         debug: false,
+        ssl: SslConfig::new(),
         databases: vec![],
     };
     for (be_name, _be_info) in &backend_state.backends {
@@ -814,6 +832,7 @@ fn main() -> io::Result<()> {
         if cli_matches.is_present(be_name) {
             server_cfg = ServerConfig {
                 debug: false,
+                ssl: SslConfig::new(),
                 databases: vec![DbConfig {
                     name: String::from("db"),
                     path: cli_matches.value_of(be_name).unwrap().to_string(),
@@ -867,7 +886,7 @@ fn main() -> io::Result<()> {
     // configure web server
     let sys = actix_rt::System::new(APPNAME);
 
-    HttpServer::new(move || {
+    let app = move || {
         App::new()
             // pass application state to each handler
             .data(Arc::clone(&srv_state))
@@ -904,10 +923,28 @@ fn main() -> io::Result<()> {
                             .to(HttpResponse::MethodNotAllowed),
                     ),
             )
-    })
-    .bind(bind_pair.to_string())?
-    .start();
+    };
 
-    println!("Starting http server: {}", bind_pair);
+    // if TLS key/cert present in config, run in TLS mode
+    if server_cfg.ssl.private_key_path.len() > 0 && server_cfg.ssl.cert_chain_path.len() > 0 {
+        let mut builder = SslAcceptor::mozilla_intermediate(SslMethod::tls()).unwrap();
+        builder
+            .set_private_key_file(server_cfg.ssl.private_key_path, SslFiletype::PEM)
+            .unwrap();
+        builder
+            .set_certificate_chain_file(server_cfg.ssl.cert_chain_path)
+            .unwrap();
+        println!("Starting https server: {}", bind_pair);
+        HttpServer::new(app)
+            .bind_ssl(bind_pair.to_string(), builder)?
+            .start();
+
+    // otherwise, plain ole HTTP
+    } else {
+        println!("Starting http server: {}", bind_pair);
+        HttpServer::new(app).bind(bind_pair.to_string())?.start();
+    }
+
+    // start event loop, run forever
     sys.run()
 }
