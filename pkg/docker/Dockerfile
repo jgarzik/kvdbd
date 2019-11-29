@@ -27,4 +27,5 @@ FROM debian:stable-slim
 ENV NAME=kvdbd
 
 COPY --from=builder /usr/src/${NAME}/target/release/${NAME} /usr/local/bin/${NAME}
+EXPOSE 8080
 CMD ${NAME}
