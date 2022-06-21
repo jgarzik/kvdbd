@@ -10,7 +10,7 @@ extern crate clap;
 extern crate reqwest;
 mod protos;
 
-const T_ENDPOINT: &'static str = "http://127.0.0.1:8080";
+const T_ENDPOINT: &'static str = "https://127.0.0.1:8080";
 const T_BASEURI: &'static str = "/api";
 
 const APPNAME: &'static str = "kvdbd-tester";
@@ -196,7 +196,10 @@ fn t_put(client: &Client, db_id: String, key: String, value: String) {
                 Err(_e) => assert!(false),
             }
         }
-        Err(_e) => assert!(false),
+        Err(_e) => {
+            println!("PUT-err {}", _e);
+            assert!(false)
+        }
     }
 }
 
@@ -562,7 +565,10 @@ fn main() {
     let _cli_matches = cli_app.get_matches();
 
     // create http client
-    let client = Client::new();
+    let client = Client::builder()
+        .danger_accept_invalid_certs(true)
+        .build()
+        .unwrap();
 
     // test, for each database
     for n in 1..3 {
