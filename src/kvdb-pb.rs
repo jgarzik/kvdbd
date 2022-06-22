@@ -1,5 +1,4 @@
 extern crate clap;
-mod protos;
 
 const APPNAME: &'static str = "kvdb-pb";
 const VERSION: &'static str = env!("CARGO_PKG_VERSION");
@@ -9,7 +8,8 @@ use std::io::{BufRead, BufReader, Write};
 use std::{env, io, process};
 
 use protobuf::Message;
-use protos::pbapi::{BatchRequest, KeyRequest, UpdateRequest};
+include!(concat!(env!("OUT_DIR"), "/protos/mod.rs"));
+use pbapi::{BatchRequest, KeyRequest, UpdateRequest};
 
 fn stdout_bytes(b: &[u8]) -> io::Result<()> {
     use std::os::unix::io::FromRawFd;
@@ -24,7 +24,7 @@ fn stdout_bytes(b: &[u8]) -> io::Result<()> {
 
 fn encode_get(key: String) -> io::Result<()> {
     let mut out_msg = KeyRequest::new();
-    out_msg.set_key(key.as_bytes().to_vec());
+    out_msg.key = key.as_bytes().to_vec();
     let out_bytes: Vec<u8> = out_msg.write_to_bytes().unwrap();
 
     stdout_bytes(&out_bytes)
@@ -32,9 +32,9 @@ fn encode_get(key: String) -> io::Result<()> {
 
 fn encode_put(key: String, val: String) -> io::Result<()> {
     let mut out_msg = UpdateRequest::new();
-    out_msg.set_key(key.as_bytes().to_vec());
-    out_msg.set_value(val.as_bytes().to_vec());
-    out_msg.set_is_insert(true);
+    out_msg.key = key.as_bytes().to_vec();
+    out_msg.value = val.as_bytes().to_vec();
+    out_msg.is_insert = true;
     let out_bytes: Vec<u8> = out_msg.write_to_bytes().unwrap();
 
     stdout_bytes(&out_bytes)
@@ -66,9 +66,9 @@ fn encode_batch(batch_path: String) -> io::Result<()> {
                 value = value.trim_end().to_string();
 
                 let mut req = UpdateRequest::new();
-                req.set_key(key.as_bytes().to_vec());
-                req.set_value(value.as_bytes().to_vec());
-                req.set_is_insert(true);
+                req.key = key.as_bytes().to_vec();
+                req.value = value.as_bytes().to_vec();
+                req.is_insert = true;
                 out_msg.reqs.push(req);
             }
             "r" => {
@@ -77,8 +77,8 @@ fn encode_batch(batch_path: String) -> io::Result<()> {
                 key = key.trim_end().to_string();
 
                 let mut req = UpdateRequest::new();
-                req.set_key(key.as_bytes().to_vec());
-                req.set_is_insert(false);
+                req.key = key.as_bytes().to_vec();
+                req.is_insert = false;
                 out_msg.reqs.push(req);
             }
             _ => panic!("Invalid batch op line"),

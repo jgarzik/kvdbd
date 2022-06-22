@@ -2,7 +2,6 @@
 extern crate actix_web;
 extern crate clap;
 mod db;
-mod protos;
 
 const APPNAME: &'static str = "kvdbd";
 const VERSION: &'static str = env!("CARGO_PKG_VERSION");
@@ -20,11 +19,13 @@ use openssl::ssl::{SslAcceptor, SslFiletype, SslMethod};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
-use protobuf::{Message, ProtobufError, ProtobufResult};
-use protos::pbapi::{
-    BatchRequest, BatchRequest_MagicNum, DbStatResponse, DbStatResponse_MagicNum, IterRequest,
-    IterRequest_MagicNum, KeyRequest, KeyRequest_MagicNum, KeyResponse, KeyResponse_MagicNum,
-    UpdateRequest, UpdateRequest_MagicNum,
+use protobuf::{EnumOrUnknown, Message};
+
+include!(concat!(env!("OUT_DIR"), "/protos/mod.rs"));
+
+use pbapi::{
+    batch_request, db_stat_response, iter_request, key_request, key_response, update_request,
+    BatchRequest, DbStatResponse, IterRequest, KeyRequest, KeyResponse, UpdateRequest,
 };
 
 // struct used for both input (server config file) and output (server info)
@@ -171,79 +172,71 @@ fn err_500() -> Result<HttpResponse> {
 
 fn pbenc_db_stat_resp(n_records: u64) -> Vec<u8> {
     let mut out_msg = DbStatResponse::new();
-    out_msg.magic = DbStatResponse_MagicNum::MAGIC;
-    out_msg.set_n_records(n_records);
+    out_msg.magic = EnumOrUnknown::new(db_stat_response::MagicNum::MAGIC);
+    out_msg.n_records = n_records;
 
     return out_msg.write_to_bytes().unwrap();
 }
 
 fn pbenc_keys_resp(key_list: &db::api::KeyList) -> Vec<u8> {
     let mut out_msg = KeyResponse::new();
-    out_msg.magic = KeyResponse_MagicNum::MAGIC;
+    out_msg.magic = EnumOrUnknown::new(key_response::MagicNum::MAGIC);
 
     for key in &key_list.keys {
         out_msg.keys.push(key.clone());
     }
-    out_msg.set_list_end(key_list.list_end);
+    out_msg.list_end = key_list.list_end;
 
     return out_msg.write_to_bytes().unwrap();
 }
 
-fn pbdec_iter_req(wiredata: &[u8]) -> ProtobufResult<IterRequest> {
+fn pbdec_iter_req(wiredata: &[u8]) -> Option<IterRequest> {
     match IterRequest::parse_from_bytes(wiredata) {
-        Err(e) => Err(e),
+        Err(_e) => None,
         Ok(req) => {
-            if req.magic != IterRequest_MagicNum::MAGIC {
-                let wire_err = protobuf::error::WireError::Other;
-                let err = ProtobufError::WireError(wire_err);
-                Err(err)
+            if req.magic != EnumOrUnknown::new(iter_request::MagicNum::MAGIC) {
+                None
             } else {
-                Ok(req)
+                Some(req)
             }
         }
     }
 }
 
-fn pbdec_key_req(wiredata: &[u8]) -> ProtobufResult<KeyRequest> {
+fn pbdec_key_req(wiredata: &[u8]) -> Option<KeyRequest> {
     match KeyRequest::parse_from_bytes(wiredata) {
-        Err(e) => Err(e),
+        Err(_e) => None,
         Ok(req) => {
-            if req.magic != KeyRequest_MagicNum::MAGIC {
-                let wire_err = protobuf::error::WireError::Other;
-                let err = ProtobufError::WireError(wire_err);
-                Err(err)
+            if req.magic != EnumOrUnknown::new(key_request::MagicNum::MAGIC) {
+                None
             } else {
-                Ok(req)
+                Some(req)
             }
         }
     }
 }
 
-fn pbdec_update_req(wiredata: &[u8]) -> ProtobufResult<UpdateRequest> {
+fn pbdec_update_req(wiredata: &[u8]) -> Option<UpdateRequest> {
     match UpdateRequest::parse_from_bytes(wiredata) {
-        Err(e) => Err(e),
+        Err(_e) => None,
         Ok(req) => {
-            if req.magic != UpdateRequest_MagicNum::MAGIC {
-                let wire_err = protobuf::error::WireError::Other;
-                let err = ProtobufError::WireError(wire_err);
-                Err(err)
+            if req.magic != EnumOrUnknown::new(update_request::MagicNum::MAGIC) {
+                None
             } else {
-                Ok(req)
+                Some(req)
             }
         }
     }
 }
 
-fn pbdec_batch_req(wiredata: &[u8]) -> ProtobufResult<BatchRequest> {
+fn pbdec_batch_req(wiredata: &[u8]) -> Option<BatchRequest> {
     match BatchRequest::parse_from_bytes(wiredata) {
-        Err(e) => Err(e),
+        Err(_e) => None,
         Ok(req) => {
-            if req.magic != BatchRequest_MagicNum::MAGIC {
-                let wire_err = protobuf::error::WireError::Other;
-                let err = ProtobufError::WireError(wire_err);
-                Err(err)
+            if req.magic != EnumOrUnknown::new(batch_request::MagicNum::MAGIC) {
+                None
             } else {
-                Ok(req)
+                Some(req)
             }
         }
     }
@@ -398,7 +391,7 @@ fn req_keys(
 ) -> Result<HttpResponse> {
     // decode protobuf msg containing key, into KeyRequest struct
     let res = pbdec_iter_req(&body);
-    if res.is_err() {
+    if res.is_none() {
         return err_bad_req();
     }
     let in_msg = res.unwrap();
@@ -515,7 +508,7 @@ fn req_del(
 ) -> Result<HttpResponse> {
     // decode protobuf msg containing key, into KeyRequest struct
     let res = pbdec_key_req(&body);
-    if res.is_err() {
+    if res.is_none() {
         return err_bad_req();
     }
     let in_msg = res.unwrap();
@@ -534,7 +527,7 @@ fn req_del(
     }
 
     // attempt to remove record from db, based on key (path elem 1)
-    match state.dbs[idx].db.del(in_msg.get_key()) {
+    match state.dbs[idx].db.del(&in_msg.key) {
         Ok(optval) => match optval {
             true => ok_json(json!({"result": true})),
             false => err_not_found(), // db: value not found
@@ -609,7 +602,7 @@ fn req_get(
 ) -> Result<HttpResponse> {
     // decode protobuf msg containing key, into KeyRequest struct
     let res = pbdec_key_req(&body);
-    if res.is_err() {
+    if res.is_none() {
         return err_bad_req();
     }
     let in_msg = res.unwrap();
@@ -628,7 +621,7 @@ fn req_get(
     }
 
     // attempt to read record from db, based on key (http payload)
-    match state.dbs[idx].db.get(in_msg.get_key()) {
+    match state.dbs[idx].db.get(&in_msg.key) {
         Ok(optval) => match optval {
             Some(val) => ok_binary(val.to_vec()),
             None => err_not_found(), // db: value not found
@@ -645,7 +638,7 @@ fn req_batch(
 ) -> Result<HttpResponse> {
     // decode protobuf msg containing key/value pairs
     let res = pbdec_batch_req(&body);
-    if res.is_err() {
+    if res.is_none() {
         return err_bad_req();
     }
     let in_msg = res.unwrap();
@@ -654,7 +647,7 @@ fn req_batch(
     let mut batch = db::api::Batch::default();
     let updates = in_msg.reqs.to_vec();
     for update in &updates {
-        if update.magic != UpdateRequest_MagicNum::MAGIC {
+        if update.magic != EnumOrUnknown::new(update_request::MagicNum::MAGIC) {
             return err_bad_req();
         }
         if update.is_insert {
@@ -718,7 +711,7 @@ fn req_put(
 ) -> Result<HttpResponse> {
     // decode protobuf msg containing key, into KeyRequest struct
     let res = pbdec_update_req(&body);
-    if res.is_err() {
+    if res.is_none() {
         return err_bad_req();
     }
     let in_msg = res.unwrap();

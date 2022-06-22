@@ -8,7 +8,6 @@
 
 extern crate clap;
 extern crate reqwest;
-mod protos;
 
 const T_ENDPOINT: &'static str = "https://127.0.0.1:8080";
 const T_BASEURI: &'static str = "/api";
@@ -18,10 +17,11 @@ const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
 use reqwest::{Client, StatusCode};
 
-use protobuf::Message;
-use protos::pbapi::{
-    BatchRequest, BatchRequest_MagicNum, DbStatResponse, IterRequest, IterRequest_MagicNum,
-    KeyRequest, KeyRequest_MagicNum, KeyResponse, UpdateRequest, UpdateRequest_MagicNum,
+use protobuf::{EnumOrUnknown, Message};
+include!(concat!(env!("OUT_DIR"), "/protos/mod.rs"));
+use pbapi::{
+    batch_request, iter_request, key_request, update_request, BatchRequest, DbStatResponse,
+    IterRequest, KeyRequest, KeyResponse, UpdateRequest,
 };
 
 struct KeyList {
@@ -31,40 +31,40 @@ struct KeyList {
 
 fn pbenc_iter_req(start_key: Option<Vec<u8>>, prefix: Option<Vec<u8>>) -> Vec<u8> {
     let mut out_msg = IterRequest::new();
-    out_msg.magic = IterRequest_MagicNum::MAGIC;
+    out_msg.magic = EnumOrUnknown::new(iter_request::MagicNum::MAGIC);
     match start_key {
-        None => out_msg.set_start_key(Vec::new()),
-        Some(s) => out_msg.set_start_key(s),
+        None => out_msg.start_key = Vec::new(),
+        Some(s) => out_msg.start_key = s,
     }
     match prefix {
-        None => out_msg.set_prefix(Vec::new()),
-        Some(s) => out_msg.set_prefix(s),
+        None => out_msg.prefix = Vec::new(),
+        Some(s) => out_msg.prefix = s,
     }
     return out_msg.write_to_bytes().unwrap();
 }
 
 fn pbenc_key_req(key: &[u8]) -> Vec<u8> {
     let mut out_msg = KeyRequest::new();
-    out_msg.magic = KeyRequest_MagicNum::MAGIC;
-    out_msg.set_key(key.to_vec());
+    out_msg.magic = EnumOrUnknown::new(key_request::MagicNum::MAGIC);
+    out_msg.key = key.to_vec();
     return out_msg.write_to_bytes().unwrap();
 }
 
 fn pbenc_update_ins(key: &[u8], val: &[u8]) -> UpdateRequest {
     let mut out_msg = UpdateRequest::new();
-    out_msg.magic = UpdateRequest_MagicNum::MAGIC;
-    out_msg.set_key(key.to_vec());
-    out_msg.set_value(val.to_vec());
-    out_msg.set_is_insert(true);
+    out_msg.magic = EnumOrUnknown::new(update_request::MagicNum::MAGIC);
+    out_msg.key = key.to_vec();
+    out_msg.value = val.to_vec();
+    out_msg.is_insert = true;
 
     out_msg
 }
 
 fn pbenc_update_del(key: &[u8]) -> UpdateRequest {
     let mut out_msg = UpdateRequest::new();
-    out_msg.magic = UpdateRequest_MagicNum::MAGIC;
-    out_msg.set_key(key.to_vec());
-    out_msg.set_is_insert(false);
+    out_msg.magic = EnumOrUnknown::new(update_request::MagicNum::MAGIC);
+    out_msg.key = key.to_vec();
+    out_msg.is_insert = false;
 
     out_msg
 }
@@ -108,7 +108,7 @@ fn t_iter(client: &Client, db_id: String, start_key: Option<Vec<u8>>) -> KeyList
 
     // copy from pb struct to normal struct for returning data
     let mut key_list: Vec<Vec<u8>> = Vec::new();
-    for key in in_msg.get_keys() {
+    for key in in_msg.keys {
         key_list.push(key.clone());
     }
 
@@ -255,7 +255,7 @@ fn op_batch(client: &Client, db_id: String) {
     t_put(client, db_id.clone(), test_key.clone(), test_value);
 
     let mut out_msg = BatchRequest::new();
-    out_msg.magic = BatchRequest_MagicNum::MAGIC;
+    out_msg.magic = EnumOrUnknown::new(batch_request::MagicNum::MAGIC);
 
     // op1: delete
     let req = pbenc_update_del("op_batch_key1".as_bytes());
