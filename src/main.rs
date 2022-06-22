@@ -20,7 +20,7 @@ use openssl::ssl::{SslAcceptor, SslFiletype, SslMethod};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
-use protobuf::{parse_from_bytes, Message, ProtobufError, ProtobufResult};
+use protobuf::{Message, ProtobufError, ProtobufResult};
 use protos::pbapi::{
     BatchRequest, BatchRequest_MagicNum, DbStatResponse, DbStatResponse_MagicNum, IterRequest,
     IterRequest_MagicNum, KeyRequest, KeyRequest_MagicNum, KeyResponse, KeyResponse_MagicNum,
@@ -190,7 +190,7 @@ fn pbenc_keys_resp(key_list: &db::api::KeyList) -> Vec<u8> {
 }
 
 fn pbdec_iter_req(wiredata: &[u8]) -> ProtobufResult<IterRequest> {
-    match parse_from_bytes::<IterRequest>(wiredata) {
+    match IterRequest::parse_from_bytes(wiredata) {
         Err(e) => Err(e),
         Ok(req) => {
             if req.magic != IterRequest_MagicNum::MAGIC {
@@ -205,7 +205,7 @@ fn pbdec_iter_req(wiredata: &[u8]) -> ProtobufResult<IterRequest> {
 }
 
 fn pbdec_key_req(wiredata: &[u8]) -> ProtobufResult<KeyRequest> {
-    match parse_from_bytes::<KeyRequest>(wiredata) {
+    match KeyRequest::parse_from_bytes(wiredata) {
         Err(e) => Err(e),
         Ok(req) => {
             if req.magic != KeyRequest_MagicNum::MAGIC {
@@ -220,7 +220,7 @@ fn pbdec_key_req(wiredata: &[u8]) -> ProtobufResult<KeyRequest> {
 }
 
 fn pbdec_update_req(wiredata: &[u8]) -> ProtobufResult<UpdateRequest> {
-    match parse_from_bytes::<UpdateRequest>(wiredata) {
+    match UpdateRequest::parse_from_bytes(wiredata) {
         Err(e) => Err(e),
         Ok(req) => {
             if req.magic != UpdateRequest_MagicNum::MAGIC {
@@ -235,7 +235,7 @@ fn pbdec_update_req(wiredata: &[u8]) -> ProtobufResult<UpdateRequest> {
 }
 
 fn pbdec_batch_req(wiredata: &[u8]) -> ProtobufResult<BatchRequest> {
-    match parse_from_bytes::<BatchRequest>(wiredata) {
+    match BatchRequest::parse_from_bytes(wiredata) {
         Err(e) => Err(e),
         Ok(req) => {
             if req.magic != BatchRequest_MagicNum::MAGIC {
