@@ -90,7 +90,7 @@ struct DbState {
 struct ServerState {
     debug: bool,
     name_idx: HashMap<String, usize>,
-    dbs: Vec<DbState>, // all open databases
+    dbs: Vec<DbState>,			// all open databases
 }
 
 struct Backend {
