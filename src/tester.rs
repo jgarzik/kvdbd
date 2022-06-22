@@ -18,7 +18,6 @@ const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
 use reqwest::{Client, StatusCode};
 
-use protobuf::parse_from_bytes;
 use protobuf::Message;
 use protos::pbapi::{
     BatchRequest, BatchRequest_MagicNum, DbStatResponse, IterRequest, IterRequest_MagicNum,
@@ -97,7 +96,7 @@ fn t_iter(client: &Client, db_id: String, start_key: Option<Vec<u8>>) -> KeyList
         Ok(_o) => {}
     }
     let in_msg;
-    match parse_from_bytes::<KeyResponse>(&body) {
+    match KeyResponse::parse_from_bytes(&body) {
         Err(_e) => {
             assert!(false);
             panic!("silence E0381 warning");
@@ -337,7 +336,7 @@ fn op_stat(client: &Client, db_id: String) {
         Ok(_o) => {}
     }
     let in_msg;
-    match parse_from_bytes::<DbStatResponse>(&body) {
+    match DbStatResponse::parse_from_bytes(&body) {
         Err(_e) => {
             assert!(false);
             panic!("silence E0381 warning");
