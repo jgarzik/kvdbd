@@ -849,8 +849,7 @@ async fn main() -> std::io::Result<()> {
     };
 
     // if TLS key/cert present in config, run in TLS mode
-    if !server_cfg.ssl.private_key_path.is_empty() &&
-       !server_cfg.ssl.cert_chain_path.is_empty() {
+    if !server_cfg.ssl.private_key_path.is_empty() && !server_cfg.ssl.cert_chain_path.is_empty() {
         let mut builder = SslAcceptor::mozilla_intermediate(SslMethod::tls()).unwrap();
         builder
             .set_private_key_file(server_cfg.ssl.private_key_path, SslFiletype::PEM)
