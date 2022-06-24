@@ -58,6 +58,11 @@ each database.
 * **driver**:  Database driver used to load/store data. Only valid value: "sled"
 * **read_only**:  True/false:  Open database in read-only mode?
 
+### Section: SSL (TLS) encryption
+
+* **private_key_path**: TLS private key for HTTPS service.
+* **cert_chain_path**: Certificate chain PEM for HTTPS service.
+
 ### Section: Misc. features
 
 * **debug**:  Boolean.  true, to enable additional per-request debug output.
