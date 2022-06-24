@@ -1,6 +1,7 @@
-#[macro_use]
+#[macro_use(get)]
 extern crate actix_web;
 extern crate clap;
+extern crate openssl;
 mod db;
 
 const APPNAME: &'static str = "kvdbd";
@@ -11,10 +12,10 @@ const DEF_BIND_PORT: &'static str = "8080";
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
-use std::{env, fs, io, process};
+use std::{env, fs, process};
 
 use actix_web::http::StatusCode;
-use actix_web::{guard, middleware, web, App, HttpRequest, HttpResponse, HttpServer, Result};
+use actix_web::{middleware, web, App, HttpRequest, HttpResponse, HttpServer};
 use openssl::ssl::{SslAcceptor, SslFiletype, SslMethod};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -132,8 +133,8 @@ fn register_backends() -> BackendState {
 }
 
 // helper function, 404 not found
-fn err_not_found() -> Result<HttpResponse> {
-    Ok(HttpResponse::build(StatusCode::NOT_FOUND)
+fn err_not_found() -> HttpResponse {
+    HttpResponse::build(StatusCode::NOT_FOUND)
         .content_type("application/json")
         .body(
             json!({
@@ -141,12 +142,12 @@ fn err_not_found() -> Result<HttpResponse> {
              "code" : -404,
               "message": "not found"}})
             .to_string(),
-        ))
+        )
 }
 
 // helper function, 400 bad request
-fn err_bad_req() -> Result<HttpResponse> {
-    Ok(HttpResponse::build(StatusCode::BAD_REQUEST)
+fn err_bad_req() -> HttpResponse {
+    HttpResponse::build(StatusCode::BAD_REQUEST)
         .content_type("application/json")
         .body(
             json!({
@@ -154,12 +155,12 @@ fn err_bad_req() -> Result<HttpResponse> {
              "code" : -400,
               "message": "invalid/malformed request"}})
             .to_string(),
-        ))
+        )
 }
 
 // helper function, 500 server error
-fn err_500() -> Result<HttpResponse> {
-    Ok(HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR)
+fn err_500() -> HttpResponse {
+    HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR)
         .content_type("application/json")
         .body(
             json!({
@@ -167,7 +168,7 @@ fn err_500() -> Result<HttpResponse> {
              "code" : -500,
               "message": "internal server error"}})
             .to_string(),
-        ))
+        )
 }
 
 fn pbenc_db_stat_resp(n_records: u64) -> Vec<u8> {
@@ -243,25 +244,22 @@ fn pbdec_batch_req(wiredata: &[u8]) -> Option<BatchRequest> {
 }
 
 // helper function, success + binary response
-fn ok_binary(val: Vec<u8>) -> Result<HttpResponse> {
-    Ok(HttpResponse::build(StatusCode::OK)
+fn ok_binary(val: Vec<u8>) -> HttpResponse {
+    HttpResponse::Ok()
         .content_type("application/octet-stream")
-        .body(val))
+        .body(val)
 }
 
 // helper function, success + json response
-fn ok_json(jval: serde_json::Value) -> Result<HttpResponse> {
-    Ok(HttpResponse::build(StatusCode::OK)
+fn ok_json(jval: serde_json::Value) -> HttpResponse {
+    HttpResponse::Ok()
         .content_type("application/json")
-        .body(jval.to_string()))
+        .body(jval.to_string())
 }
 
 /// simple root index handler, describes our service
 #[get("/")]
-fn req_index(
-    m_state: web::Data<Arc<Mutex<ServerState>>>,
-    req: HttpRequest,
-) -> Result<HttpResponse> {
+async fn req_index(m_state: web::Data<Arc<Mutex<ServerState>>>) -> HttpResponse {
     // fill basic server info struct used for output
     let mut srv_info = ServerInfo {
         name: String::from(APPNAME),
@@ -271,9 +269,6 @@ fn req_index(
 
     // lock runtime-live state data
     let state = m_state.lock().unwrap();
-    if state.debug {
-        println!("{:?}", req);
-    }
 
     // copy each db config into output struct
     for db_state in &state.dbs {
@@ -281,23 +276,19 @@ fn req_index(
     }
 
     // serialize structs into json
-    let jv = serde_json::to_value(&srv_info)?;
+    let jv = serde_json::to_value(&srv_info).unwrap();
 
     // return json output
     ok_json(jv)
 }
 
 /// CLEAR all data items.
-fn req_clear(
+async fn req_clear(
     m_state: web::Data<Arc<Mutex<ServerState>>>,
-    req: HttpRequest,
     path: web::Path<(String,)>,
-) -> Result<HttpResponse> {
+) -> HttpResponse {
     // lock runtime-live state data
     let mut state = m_state.lock().unwrap();
-    if state.debug {
-        println!("{:?}", req);
-    }
 
     // lookup database index by name (path elem 0)
     let idx: usize;
@@ -314,16 +305,12 @@ fn req_clear(
 }
 
 /// Return db stats as protobuf
-fn req_stat(
+async fn req_stat(
     m_state: web::Data<Arc<Mutex<ServerState>>>,
-    req: HttpRequest,
     path: web::Path<(String,)>,
-) -> Result<HttpResponse> {
+) -> HttpResponse {
     // lock runtime-live state data
     let state = m_state.lock().unwrap();
-    if state.debug {
-        println!("{:?}", req);
-    }
 
     // lookup database index by name (path elem 0)
     let idx: usize;
@@ -346,16 +333,12 @@ fn req_stat(
 }
 
 /// Return db stats as JSON
-fn req_stat_json(
+async fn req_stat_json(
     m_state: web::Data<Arc<Mutex<ServerState>>>,
-    req: HttpRequest,
     path: web::Path<(String,)>,
-) -> Result<HttpResponse> {
+) -> HttpResponse {
     // lock runtime-live state data
     let state = m_state.lock().unwrap();
-    if state.debug {
-        println!("{:?}", req);
-    }
 
     // lookup database index by name (path elem 0)
     let idx: usize;
@@ -377,18 +360,17 @@ fn req_stat_json(
     };
 
     // serialize structs into json
-    let jv = serde_json::to_value(&out_msg)?;
+    let jv = serde_json::to_value(&out_msg).unwrap();
 
     // return json output
     ok_json(jv)
 }
 
 /// Sequential iteration through all KEYS in db. Start-key in HTTP payload.
-fn req_keys(
+async fn req_keys(
     m_state: web::Data<Arc<Mutex<ServerState>>>,
-    req: HttpRequest,
     (path, body): (web::Path<(String,)>, web::Bytes),
-) -> Result<HttpResponse> {
+) -> HttpResponse {
     // decode protobuf msg containing key, into KeyRequest struct
     let res = pbdec_iter_req(&body);
     if res.is_none() {
@@ -398,9 +380,6 @@ fn req_keys(
 
     // lock runtime-live state data
     let state = m_state.lock().unwrap();
-    if state.debug {
-        println!("{:?}", req);
-    }
 
     // lookup database index by name (path elem 0)
     let idx: usize;
@@ -430,11 +409,11 @@ fn req_keys(
 }
 
 /// Sequential iteration through all KEYS in db. Start-key in HTTP payload.
-fn req_keys_json(
+async fn req_keys_json(
     m_state: web::Data<Arc<Mutex<ServerState>>>,
     req: HttpRequest,
     path: web::Path<(String,)>,
-) -> Result<HttpResponse> {
+) -> HttpResponse {
     let mut lastkey: Option<Vec<u8>> = None;
 
     // query string continues previous search
@@ -459,9 +438,6 @@ fn req_keys_json(
 
     // lock runtime-live state data
     let state = m_state.lock().unwrap();
-    if state.debug {
-        println!("{:?}", req);
-    }
 
     // lookup database index by name (path elem 0)
     let idx: usize;
@@ -494,18 +470,17 @@ fn req_keys_json(
     }
 
     // serialize structs into json
-    let jv = serde_json::to_value(&out_msg)?;
+    let jv = serde_json::to_value(&out_msg).unwrap();
 
     // return json output
     ok_json(jv)
 }
 
 /// DELETE data item. key in HTTP payload.  return ok as json response
-fn req_del(
+async fn req_del(
     m_state: web::Data<Arc<Mutex<ServerState>>>,
-    req: HttpRequest,
     (path, body): (web::Path<(String,)>, web::Bytes),
-) -> Result<HttpResponse> {
+) -> HttpResponse {
     // decode protobuf msg containing key, into KeyRequest struct
     let res = pbdec_key_req(&body);
     if res.is_none() {
@@ -515,9 +490,6 @@ fn req_del(
 
     // lock runtime-live state data
     let mut state = m_state.lock().unwrap();
-    if state.debug {
-        println!("{:?}", req);
-    }
 
     // lookup database index by name (path elem 0)
     let idx: usize;
@@ -537,16 +509,12 @@ fn req_del(
 }
 
 /// DELETE data item.  key in URI path.  return ok as json response
-fn req_obj_delete(
+async fn req_obj_delete(
     m_state: web::Data<Arc<Mutex<ServerState>>>,
-    req: HttpRequest,
     path: web::Path<(String, String)>,
-) -> Result<HttpResponse> {
+) -> HttpResponse {
     // lock runtime-live state data
     let mut state = m_state.lock().unwrap();
-    if state.debug {
-        println!("{:?}", req);
-    }
 
     // lookup database index by name (path elem 0)
     let idx: usize;
@@ -566,16 +534,12 @@ fn req_obj_delete(
 }
 
 /// GET data item. key in URI path, returns value in HTTP payload.
-fn req_obj_get(
+async fn req_obj_get(
     m_state: web::Data<Arc<Mutex<ServerState>>>,
-    req: HttpRequest,
     path: web::Path<(String, String)>,
-) -> Result<HttpResponse> {
+) -> HttpResponse {
     // lock runtime-live state data
     let state = m_state.lock().unwrap();
-    if state.debug {
-        println!("{:?}", req);
-    }
 
     // lookup database index by name (path elem 0)
     let idx: usize;
@@ -595,11 +559,10 @@ fn req_obj_get(
 }
 
 /// GET data item. key in HTTP payload, returns value in HTTP payload.
-fn req_get(
+async fn req_get(
     m_state: web::Data<Arc<Mutex<ServerState>>>,
-    req: HttpRequest,
     (path, body): (web::Path<(String,)>, web::Bytes),
-) -> Result<HttpResponse> {
+) -> HttpResponse {
     // decode protobuf msg containing key, into KeyRequest struct
     let res = pbdec_key_req(&body);
     if res.is_none() {
@@ -609,9 +572,6 @@ fn req_get(
 
     // lock runtime-live state data
     let state = m_state.lock().unwrap();
-    if state.debug {
-        println!("{:?}", req);
-    }
 
     // lookup database index by name (path elem 0)
     let idx: usize;
@@ -631,11 +591,10 @@ fn req_get(
 }
 
 /// atomic PUT of multiple data items. data items in HTTP payload. ret json ok.
-fn req_batch(
+async fn req_batch(
     m_state: web::Data<Arc<Mutex<ServerState>>>,
-    req: HttpRequest,
     (path, body): (web::Path<(String,)>, web::Bytes),
-) -> Result<HttpResponse> {
+) -> HttpResponse {
     // decode protobuf msg containing key/value pairs
     let res = pbdec_batch_req(&body);
     if res.is_none() {
@@ -659,9 +618,6 @@ fn req_batch(
 
     // lock runtime-live state data
     let mut state = m_state.lock().unwrap();
-    if state.debug {
-        println!("{:?}", req);
-    }
 
     // lookup database index by name (path elem 0)
     let idx: usize;
@@ -678,16 +634,12 @@ fn req_batch(
 }
 
 /// PUT data item. key in URI path, value in HTTP payload.
-fn req_obj_put(
+async fn req_obj_put(
     m_state: web::Data<Arc<Mutex<ServerState>>>,
-    req: HttpRequest,
     (path, body): (web::Path<(String, String)>, web::Bytes),
-) -> Result<HttpResponse> {
+) -> HttpResponse {
     // lock runtime-live state data
     let mut state = m_state.lock().unwrap();
-    if state.debug {
-        println!("{:?}", req);
-    }
 
     // lookup database index by name (path elem 0)
     let idx: usize;
@@ -704,11 +656,10 @@ fn req_obj_put(
 }
 
 /// PUT data item. key/value in HTTP payload.
-fn req_put(
+async fn req_put(
     m_state: web::Data<Arc<Mutex<ServerState>>>,
-    req: HttpRequest,
     (path, body): (web::Path<(String,)>, web::Bytes),
-) -> Result<HttpResponse> {
+) -> HttpResponse {
     // decode protobuf msg containing key, into KeyRequest struct
     let res = pbdec_update_req(&body);
     if res.is_none() {
@@ -721,9 +672,6 @@ fn req_put(
 
     // lock runtime-live state data
     let mut state = m_state.lock().unwrap();
-    if state.debug {
-        println!("{:?}", req);
-    }
 
     // lookup database index by name (path elem 0)
     let idx: usize;
@@ -739,12 +687,8 @@ fn req_put(
     }
 }
 
-/// 404 handler
-fn p404() -> Result<HttpResponse> {
-    err_not_found()
-}
-
-fn main() -> io::Result<()> {
+#[actix_web::main]
+async fn main() -> std::io::Result<()> {
     env::set_var("RUST_LOG", "actix_web=debug");
     env_logger::init();
 
@@ -877,14 +821,12 @@ fn main() -> io::Result<()> {
     }));
 
     // configure web server
-    let sys = actix_rt::System::new(APPNAME);
-
     let app = move || {
         App::new()
             // pass application state to each handler
-            .data(Arc::clone(&srv_state))
+            .app_data(web::Data::new(Arc::clone(&srv_state)))
             // apply default headers
-            .wrap(middleware::DefaultHeaders::new().header("Server", server_hdr.to_string()))
+            .wrap(middleware::DefaultHeaders::new().add(("Server", server_hdr.to_string())))
             // enable logger - always register actix-web Logger middleware last
             .wrap(middleware::Logger::default())
             // register our routes
@@ -904,22 +846,11 @@ fn main() -> io::Result<()> {
             .service(web::resource("/api/{db}/put").route(web::post().to(req_put)))
             .service(web::resource("/api/{db}/stat").route(web::get().to(req_stat)))
             .service(web::resource("/api/{db}/stat.json").route(web::get().to(req_stat_json)))
-            // default
-            .default_service(
-                // 404 for GET request
-                web::resource("")
-                    .route(web::get().to(p404))
-                    // all requests that are not `GET` -- redundant?
-                    .route(
-                        web::route()
-                            .guard(guard::Not(guard::Get()))
-                            .to(HttpResponse::MethodNotAllowed),
-                    ),
-            )
     };
 
     // if TLS key/cert present in config, run in TLS mode
-    if server_cfg.ssl.private_key_path.len() > 0 && server_cfg.ssl.cert_chain_path.len() > 0 {
+    if !server_cfg.ssl.private_key_path.is_empty() &&
+       !server_cfg.ssl.cert_chain_path.is_empty() {
         let mut builder = SslAcceptor::mozilla_intermediate(SslMethod::tls()).unwrap();
         builder
             .set_private_key_file(server_cfg.ssl.private_key_path, SslFiletype::PEM)
@@ -929,15 +860,16 @@ fn main() -> io::Result<()> {
             .unwrap();
         println!("Starting https server: {}", bind_pair);
         HttpServer::new(app)
-            .bind_ssl(bind_pair.to_string(), builder)?
-            .start();
+            .bind_openssl(bind_pair.to_string(), builder)?
+            .run()
+            .await
 
     // otherwise, plain ole HTTP
     } else {
         println!("Starting http server: {}", bind_pair);
-        HttpServer::new(app).bind(bind_pair.to_string())?.start();
+        HttpServer::new(app)
+            .bind(bind_pair.to_string())?
+            .run()
+            .await
     }
-
-    // start event loop, run forever
-    sys.run()
 }
