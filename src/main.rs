@@ -89,6 +89,7 @@ struct DbState {
 }
 
 // runtime server state info
+#[allow(dead_code)]
 struct ServerState {
     debug: bool,
     name_idx: HashMap<String, usize>,
@@ -815,7 +816,7 @@ async fn main() -> std::io::Result<()> {
     }
 
     let srv_state = Arc::new(Mutex::new(ServerState {
-        debug: false,
+        debug: server_cfg.debug,
         name_idx: name_idx,
         dbs: dbs,
     }));
