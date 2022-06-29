@@ -127,13 +127,10 @@ pub struct SledDriver {}
 
 impl api::Driver for SledDriver {
     fn start_db(&self, cfg: api::Config) -> Result<Box<dyn api::Db + Send>, &'static str> {
-        let sled_db_cfg = sled::ConfigBuilder::new()
-            .path(cfg.path)
-            .read_only(cfg.read_only)
-            .build();
+        let sled_db_cfg = sled::Config::default().path(cfg.path);
 
         Ok(Box::new(SledDb {
-            db: sled::Db::start(sled_db_cfg).unwrap(),
+            db: sled_db_cfg.open().unwrap(),
         }) as Box<dyn api::Db + Send>)
     }
 }

@@ -17,7 +17,7 @@ clap = "^2.33"
 reqwest = "^0.11"
 tokio = { version = "1", features = ["full"] }
 protobuf = "3"
-sled = "^0.28"
+sled = "^0.34"
 lmdb = "^0.8"
 openssl = "^0.10"
 
