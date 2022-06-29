@@ -106,14 +106,14 @@ fn main() -> io::Result<()> {
         )
         .arg(
             clap::Arg::with_name("decode")
-                .short("d")
+                .short('d')
                 .long("decode")
                 .help("Decode protobuf input and print")
                 .takes_value(false),
         )
         .arg(
             clap::Arg::with_name("encode")
-                .short("e")
+                .short('e')
                 .long("encode")
                 .help("Encode CLI args to protobuf output")
                 .takes_value(false),
