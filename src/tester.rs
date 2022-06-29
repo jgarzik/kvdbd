@@ -74,7 +74,7 @@ fn pbenc_update_req(key: &[u8], val: &[u8]) -> Vec<u8> {
     return out_msg.write_to_bytes().unwrap();
 }
 
-fn t_iter(client: &Client, db_id: String, start_key: Option<Vec<u8>>) -> KeyList {
+async fn t_iter(client: &Client, db_id: String, start_key: Option<Vec<u8>>) -> KeyList {
     let basepath = format!("{}{}/{}/", T_ENDPOINT, T_BASEURI, db_id);
     let keys_url = format!("{}keys", basepath);
 
@@ -82,21 +82,26 @@ fn t_iter(client: &Client, db_id: String, start_key: Option<Vec<u8>>) -> KeyList
     let out_bytes = pbenc_iter_req(start_key, None);
 
     // exec keys request; check for successful response
-    let resp_res = client.post(&keys_url).body(out_bytes).send();
+    let resp_res = client.post(&keys_url).body(out_bytes).send().await;
     if resp_res.is_err() {
         assert!(false);
     }
-    let mut resp = resp_res.unwrap();
+    let resp = resp_res.unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
 
     // decode protobuf list-of-keys response
-    let mut body: Vec<u8> = vec![];
-    match resp.copy_to(&mut body) {
-        Err(_e) => assert!(false),
-        Ok(_o) => {}
+    let bytes_res = resp.bytes().await;
+    let bytes;
+    match bytes_res {
+        Ok(bytes_) => bytes = bytes_,
+        Err(_e) => {
+            assert!(false);
+            panic!("silence E0381 warning");
+        }
     }
+
     let in_msg;
-    match KeyResponse::parse_from_bytes(&body) {
+    match KeyResponse::parse_from_bytes(&bytes) {
         Err(_e) => {
             assert!(false);
             panic!("silence E0381 warning");
@@ -118,7 +123,7 @@ fn t_iter(client: &Client, db_id: String, start_key: Option<Vec<u8>>) -> KeyList
     }
 }
 
-fn t_get_gone(client: &Client, db_id: String, key: String) {
+async fn t_get_gone(client: &Client, db_id: String, key: String) {
     let basepath = format!("{}{}/{}/", T_ENDPOINT, T_BASEURI, db_id);
     let get_url = format!("{}get", basepath);
 
@@ -126,14 +131,14 @@ fn t_get_gone(client: &Client, db_id: String, key: String) {
     let out_bytes = pbenc_key_req(key.as_bytes());
 
     // exec get request; key1 should not exist, following batch
-    let resp_res = client.post(&get_url).body(out_bytes).send();
+    let resp_res = client.post(&get_url).body(out_bytes).send().await;
     match resp_res {
         Ok(resp) => assert_eq!(resp.status(), StatusCode::NOT_FOUND),
         Err(_e) => assert!(false),
     }
 }
 
-fn t_get_ok(client: &Client, db_id: String, key: String, value: String) {
+async fn t_get_ok(client: &Client, db_id: String, key: String, value: String) {
     let basepath = format!("{}{}/{}/", T_ENDPOINT, T_BASEURI, db_id);
     let get_url = format!("{}get", basepath);
 
@@ -141,12 +146,12 @@ fn t_get_ok(client: &Client, db_id: String, key: String, value: String) {
     let out_bytes = pbenc_key_req(key.as_bytes());
 
     // exec get request; key1 should not exist, following batch
-    let resp_res = client.post(&get_url).body(out_bytes.clone()).send();
+    let resp_res = client.post(&get_url).body(out_bytes.clone()).send().await;
     match resp_res {
-        Ok(mut resp) => {
+        Ok(resp) => {
             assert_eq!(resp.status(), StatusCode::OK);
 
-            match resp.text() {
+            match resp.text().await {
                 Ok(body) => assert_eq!(body, value),
                 Err(_e) => assert!(false),
             }
@@ -155,7 +160,7 @@ fn t_get_ok(client: &Client, db_id: String, key: String, value: String) {
     }
 }
 
-fn t_put_bytes(client: &Client, db_id: String, key: &[u8], value: &[u8]) {
+async fn t_put_bytes(client: &Client, db_id: String, key: &[u8], value: &[u8]) {
     let basepath = format!("{}{}/{}/", T_ENDPOINT, T_BASEURI, db_id);
     let put_url = format!("{}put", basepath);
 
@@ -163,12 +168,12 @@ fn t_put_bytes(client: &Client, db_id: String, key: &[u8], value: &[u8]) {
     let out_bytes = pbenc_update_req(key, value);
 
     // exec put request
-    let resp_res = client.post(&put_url).body(out_bytes).send();
+    let resp_res = client.post(&put_url).body(out_bytes).send().await;
     match resp_res {
-        Ok(mut resp) => {
+        Ok(resp) => {
             assert_eq!(resp.status(), StatusCode::OK);
 
-            match resp.text() {
+            match resp.text().await {
                 Ok(_body) => {}
                 Err(_e) => assert!(false),
             }
@@ -177,7 +182,7 @@ fn t_put_bytes(client: &Client, db_id: String, key: &[u8], value: &[u8]) {
     }
 }
 
-fn t_put(client: &Client, db_id: String, key: String, value: String) {
+async fn t_put(client: &Client, db_id: String, key: String, value: String) {
     let basepath = format!("{}{}/{}/", T_ENDPOINT, T_BASEURI, db_id);
     let put_url = format!("{}put", basepath);
 
@@ -185,12 +190,12 @@ fn t_put(client: &Client, db_id: String, key: String, value: String) {
     let out_bytes = pbenc_update_req(key.as_bytes(), value.as_bytes());
 
     // exec put request
-    let resp_res = client.post(&put_url).body(out_bytes).send();
+    let resp_res = client.post(&put_url).body(out_bytes).send().await;
     match resp_res {
-        Ok(mut resp) => {
+        Ok(resp) => {
             assert_eq!(resp.status(), StatusCode::OK);
 
-            match resp.text() {
+            match resp.text().await {
                 Ok(_body) => {}
                 Err(_e) => assert!(false),
             }
@@ -202,7 +207,7 @@ fn t_put(client: &Client, db_id: String, key: String, value: String) {
     }
 }
 
-fn t_del(client: &Client, db_id: String, key: String) {
+async fn t_del(client: &Client, db_id: String, key: String) {
     let basepath = format!("{}{}/{}/", T_ENDPOINT, T_BASEURI, db_id);
     let del_url = format!("{}del", basepath);
 
@@ -210,12 +215,12 @@ fn t_del(client: &Client, db_id: String, key: String) {
     let out_bytes = pbenc_key_req(key.as_bytes());
 
     // exec del request
-    let resp_res = client.post(&del_url).body(out_bytes).send();
+    let resp_res = client.post(&del_url).body(out_bytes).send().await;
     match resp_res {
-        Ok(mut resp) => {
+        Ok(resp) => {
             assert_eq!(resp.status(), StatusCode::OK);
 
-            match resp.text() {
+            match resp.text().await {
                 Ok(_body) => {}
                 Err(_e) => assert!(false),
             }
@@ -224,7 +229,7 @@ fn t_del(client: &Client, db_id: String, key: String) {
     }
 }
 
-fn t_del_gone(client: &Client, db_id: String, key: String) {
+async fn t_del_gone(client: &Client, db_id: String, key: String) {
     let basepath = format!("{}{}/{}/", T_ENDPOINT, T_BASEURI, db_id);
     let del_url = format!("{}del", basepath);
 
@@ -232,12 +237,12 @@ fn t_del_gone(client: &Client, db_id: String, key: String) {
     let out_bytes = pbenc_key_req(key.as_bytes());
 
     // exec del request
-    let resp_res = client.post(&del_url).body(out_bytes).send();
+    let resp_res = client.post(&del_url).body(out_bytes).send().await;
     match resp_res {
-        Ok(mut resp) => {
+        Ok(resp) => {
             assert_eq!(resp.status(), StatusCode::NOT_FOUND);
 
-            match resp.text() {
+            match resp.text().await {
                 Ok(_body) => {}
                 Err(_e) => assert!(false),
             }
@@ -246,13 +251,13 @@ fn t_del_gone(client: &Client, db_id: String, key: String) {
     }
 }
 
-fn op_batch(client: &Client, db_id: String) {
+async fn op_batch(client: &Client, db_id: String) {
     let basepath = format!("{}{}/{}/", T_ENDPOINT, T_BASEURI, db_id);
     let batch_url = format!("{}batch", basepath);
     let test_key = String::from("op_batch_key1");
     let test_value = format!("helloworld op_put {}", db_id);
 
-    t_put(client, db_id.clone(), test_key.clone(), test_value);
+    t_put(client, db_id.clone(), test_key.clone(), test_value).await;
 
     let mut out_msg = BatchRequest::new();
     out_msg.magic = EnumOrUnknown::new(batch_request::MagicNum::MAGIC);
@@ -272,12 +277,12 @@ fn op_batch(client: &Client, db_id: String) {
     let out_bytes: Vec<u8> = out_msg.write_to_bytes().unwrap();
 
     // exec batch request
-    let resp_res = client.post(&batch_url).body(out_bytes).send();
+    let resp_res = client.post(&batch_url).body(out_bytes).send().await;
     match resp_res {
-        Ok(mut resp) => {
+        Ok(resp) => {
             assert_eq!(resp.status(), StatusCode::OK);
 
-            match resp.text() {
+            match resp.text().await {
                 Ok(_body) => {}
                 Err(_e) => assert!(false),
             }
@@ -285,58 +290,65 @@ fn op_batch(client: &Client, db_id: String) {
         Err(_e) => assert!(false),
     }
 
-    t_get_gone(client, db_id.clone(), test_key.clone());
+    t_get_gone(client, db_id.clone(), test_key.clone()).await;
     t_get_ok(
         client,
         db_id.clone(),
         String::from("op_batch_key2"),
         String::from("op_batch_value2"),
-    );
+    )
+    .await;
     t_get_ok(
         client,
         db_id.clone(),
         String::from("op_batch_key3"),
         String::from("op_batch_value3"),
-    );
+    )
+    .await;
 
-    t_del(client, db_id.clone(), String::from("op_batch_key2"));
-    t_del(client, db_id, String::from("op_batch_key3"));
+    t_del(client, db_id.clone(), String::from("op_batch_key2")).await;
+    t_del(client, db_id, String::from("op_batch_key3")).await;
 }
 
-fn op_del(client: &Client, db_id: String) {
+async fn op_del(client: &Client, db_id: String) {
     let test_key = String::from("op_del_key1");
     let test_value = format!("helloworld op_del {}", db_id);
 
-    t_put(client, db_id.clone(), test_key.clone(), test_value);
-    t_del(client, db_id.clone(), test_key.clone());
-    t_del_gone(client, db_id, test_key);
+    t_put(client, db_id.clone(), test_key.clone(), test_value).await;
+    t_del(client, db_id.clone(), test_key.clone()).await;
+    t_del_gone(client, db_id, test_key).await;
 }
 
-fn op_stat(client: &Client, db_id: String) {
+async fn op_stat(client: &Client, db_id: String) {
     let test_key = String::from("op_stat_key1");
     let test_value = format!("helloworld op_stat {}", db_id);
 
-    t_put(client, db_id.clone(), test_key.clone(), test_value);
+    t_put(client, db_id.clone(), test_key.clone(), test_value).await;
 
     let basepath = format!("{}{}/{}/", T_ENDPOINT, T_BASEURI, db_id);
     let stat_url = format!("{}stat", basepath);
 
     // exec db-stat request
-    let resp_res = client.get(&stat_url).send();
+    let resp_res = client.get(&stat_url).send().await;
     if resp_res.is_err() {
         assert!(false);
     }
-    let mut resp = resp_res.unwrap();
+    let resp = resp_res.unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
 
     // decode protobuf list-of-keys response
-    let mut body: Vec<u8> = vec![];
-    match resp.copy_to(&mut body) {
-        Err(_e) => assert!(false),
-        Ok(_o) => {}
+    let bytes_res = resp.bytes().await;
+    let bytes;
+    match bytes_res {
+        Ok(bytes_) => bytes = bytes_,
+        Err(_e) => {
+            assert!(false);
+            panic!("silence E0381 warning");
+        }
     }
+
     let in_msg;
-    match DbStatResponse::parse_from_bytes(&body) {
+    match DbStatResponse::parse_from_bytes(&bytes) {
         Err(_e) => {
             assert!(false);
             panic!("silence E0381 warning");
@@ -349,7 +361,7 @@ fn op_stat(client: &Client, db_id: String) {
     assert_eq!(in_msg.n_records, 1);
 }
 
-fn op_iter(client: &Client, db_id: String) {
+async fn op_iter(client: &Client, db_id: String) {
     const DATA_COUNT: usize = 2001;
     let mut vdata: Vec<Vec<u8>> = Vec::new();
 
@@ -361,7 +373,7 @@ fn op_iter(client: &Client, db_id: String) {
     }
 
     for s in &vdata {
-        t_put_bytes(client, db_id.clone(), &s, &s);
+        t_put_bytes(client, db_id.clone(), &s, &s).await;
     }
 
     let mut check_data: Vec<Vec<u8>> = Vec::new();
@@ -369,7 +381,7 @@ fn op_iter(client: &Client, db_id: String) {
     let mut last_key: Option<Vec<u8>> = None;
     let mut list_end = false;
     while !list_end {
-        let key_list = t_iter(client, db_id.clone(), last_key.clone());
+        let key_list = t_iter(client, db_id.clone(), last_key.clone()).await;
 
         for key in key_list.keys {
             check_data.push(key.clone());
@@ -389,38 +401,38 @@ fn op_iter(client: &Client, db_id: String) {
     }
 }
 
-fn op_get(client: &Client, db_id: String) {
+async fn op_get(client: &Client, db_id: String) {
     let test_key = String::from("op_key1");
     let test_value = format!("helloworld op_get {}", db_id);
 
-    t_get_gone(client, db_id.clone(), test_key.clone());
-    t_put(client, db_id.clone(), test_key.clone(), test_value.clone());
-    t_get_ok(client, db_id.clone(), test_key.clone(), test_value);
-    t_del(client, db_id.clone(), test_key.clone());
-    t_get_gone(client, db_id, test_key);
+    t_get_gone(client, db_id.clone(), test_key.clone()).await;
+    t_put(client, db_id.clone(), test_key.clone(), test_value.clone()).await;
+    t_get_ok(client, db_id.clone(), test_key.clone(), test_value).await;
+    t_del(client, db_id.clone(), test_key.clone()).await;
+    t_get_gone(client, db_id, test_key).await;
 }
 
-fn op_clear(client: &Client, db_id: String) {
+async fn op_clear(client: &Client, db_id: String) {
     let basepath = format!("{}{}/{}/", T_ENDPOINT, T_BASEURI, db_id);
     let clear_url = format!("{}clear", basepath);
     let test_key = String::from("op_clear_key");
     let test_value = format!("helloworld op_clear {}", db_id);
 
-    t_get_gone(client, db_id.clone(), test_key.clone());
-    t_put(client, db_id.clone(), test_key.clone(), test_value.clone());
-    t_get_ok(client, db_id.clone(), test_key.clone(), test_value);
+    t_get_gone(client, db_id.clone(), test_key.clone()).await;
+    t_put(client, db_id.clone(), test_key.clone(), test_value.clone()).await;
+    t_get_ok(client, db_id.clone(), test_key.clone(), test_value).await;
 
     // exec clear-db request
-    let resp_res = client.post(&clear_url).send();
+    let resp_res = client.post(&clear_url).send().await;
     match resp_res {
         Ok(resp) => assert_eq!(resp.status(), StatusCode::OK),
         Err(_e) => assert!(false),
     }
 
-    t_get_gone(client, db_id, test_key);
+    t_get_gone(client, db_id, test_key).await;
 }
 
-fn op_put(client: &Client, db_id: String) {
+async fn op_put(client: &Client, db_id: String) {
     let basepath = format!("{}{}/{}/", T_ENDPOINT, T_BASEURI, db_id);
     let put_url = format!("{}put", basepath);
     let get_url = format!("{}get", basepath);
@@ -432,12 +444,12 @@ fn op_put(client: &Client, db_id: String) {
     let out_bytes = pbenc_update_req(test_key.as_bytes(), test_value.as_bytes());
 
     // exec put request
-    let resp_res = client.post(&put_url).body(out_bytes).send();
+    let resp_res = client.post(&put_url).body(out_bytes).send().await;
     match resp_res {
-        Ok(mut resp) => {
+        Ok(resp) => {
             assert_eq!(resp.status(), StatusCode::OK);
 
-            match resp.text() {
+            match resp.text().await {
                 Ok(_body) => {}
                 Err(_e) => assert!(false),
             }
@@ -449,12 +461,12 @@ fn op_put(client: &Client, db_id: String) {
     let out_bytes = pbenc_key_req(test_key.as_bytes());
 
     // exec get request
-    let resp_res = client.post(&get_url).body(out_bytes.clone()).send();
+    let resp_res = client.post(&get_url).body(out_bytes.clone()).send().await;
     match resp_res {
-        Ok(mut resp) => {
+        Ok(resp) => {
             assert_eq!(resp.status(), StatusCode::OK);
 
-            match resp.text() {
+            match resp.text().await {
                 Ok(body) => assert_eq!(body, test_value),
                 Err(_e) => assert!(false),
             }
@@ -465,47 +477,47 @@ fn op_put(client: &Client, db_id: String) {
     // re-use same KeyRequest bytes for our delete request
 
     // exec del request
-    let resp_res = client.post(&del_url).body(out_bytes).send();
+    let resp_res = client.post(&del_url).body(out_bytes).send().await;
     match resp_res {
         Ok(resp) => assert_eq!(resp.status(), StatusCode::OK),
         Err(_e) => assert!(false),
     }
 }
 
-fn op_obj(client: &Client, db_id: String) {
+async fn op_obj(client: &Client, db_id: String) {
     let basepath = format!("{}{}/{}/", T_ENDPOINT, T_BASEURI, db_id);
     let test_key = String::from("1");
     let test_value = format!("helloworld {}", db_id);
 
     // Check that a record with key 1 doesn't exist.
     let url = format!("{}obj/{}", basepath, test_key);
-    let resp_res = client.get(&url).send();
+    let resp_res = client.get(&url).send().await;
     match resp_res {
         Ok(resp) => assert_eq!(resp.status(), StatusCode::NOT_FOUND),
         Err(_e) => assert!(false),
     }
 
     // verify DELETE(non exist) returns not-found
-    let resp_res = client.delete(&url).send();
+    let resp_res = client.delete(&url).send().await;
     match resp_res {
         Ok(resp) => assert_eq!(resp.status(), StatusCode::NOT_FOUND),
         Err(_e) => assert!(false),
     }
 
     // PUT a new record
-    let resp_res = client.put(&url).body(test_value.clone()).send();
+    let resp_res = client.put(&url).body(test_value.clone()).send().await;
     match resp_res {
         Ok(resp) => assert_eq!(resp.status(), StatusCode::OK),
         Err(_e) => assert!(false),
     }
 
     // Check that the record exists with the correct contents.
-    let resp_res = client.get(&url).send();
+    let resp_res = client.get(&url).send().await;
     match resp_res {
-        Ok(mut resp) => {
+        Ok(resp) => {
             assert_eq!(resp.status(), StatusCode::OK);
 
-            match resp.text() {
+            match resp.text().await {
                 Ok(body) => assert_eq!(body, test_value),
                 Err(_e) => assert!(false),
             }
@@ -518,12 +530,12 @@ fn op_obj(client: &Client, db_id: String) {
     let out_bytes = pbenc_key_req(test_key.as_bytes());
 
     let get_pb_url = format!("{}get", basepath);
-    let resp_res = client.post(&get_pb_url).body(out_bytes).send();
+    let resp_res = client.post(&get_pb_url).body(out_bytes).send().await;
     match resp_res {
-        Ok(mut resp) => {
+        Ok(resp) => {
             assert_eq!(resp.status(), StatusCode::OK);
 
-            match resp.text() {
+            match resp.text().await {
                 Ok(body) => assert_eq!(body, test_value),
                 Err(_e) => assert!(false),
             }
@@ -532,28 +544,29 @@ fn op_obj(client: &Client, db_id: String) {
     }
 
     // DELETE record
-    let resp_res = client.delete(&url).send();
+    let resp_res = client.delete(&url).send().await;
     match resp_res {
         Ok(resp) => assert_eq!(resp.status(), StatusCode::OK),
         Err(_e) => assert!(false),
     }
 
     // Check (again) that a record with key 1 doesn't exist.
-    let resp_res = client.get(&url).send();
+    let resp_res = client.get(&url).send().await;
     match resp_res {
         Ok(resp) => assert_eq!(resp.status(), StatusCode::NOT_FOUND),
         Err(_e) => assert!(false),
     }
 
     // verify (again) DELETE(non exist) returns not-found
-    let resp_res = client.delete(&url).send();
+    let resp_res = client.delete(&url).send().await;
     match resp_res {
         Ok(resp) => assert_eq!(resp.status(), StatusCode::NOT_FOUND),
         Err(_e) => assert!(false),
     }
 }
 
-fn main() {
+#[tokio::main]
+async fn main() -> Result<(), reqwest::Error> {
     // CLI parser static setup
     let cli_app = clap::App::new(APPNAME)
         .version(VERSION)
@@ -573,14 +586,15 @@ fn main() {
     for n in 1..3 {
         let db_id = format!("db{}", n);
 
-        op_batch(&client, db_id.clone());
-        op_del(&client, db_id.clone());
-        op_get(&client, db_id.clone());
-        op_obj(&client, db_id.clone());
-        op_put(&client, db_id.clone());
-        op_clear(&client, db_id.clone());
-        op_stat(&client, db_id.clone());
-        op_iter(&client, db_id.clone());
+        op_batch(&client, db_id.clone()).await;
+        op_del(&client, db_id.clone()).await;
+        op_get(&client, db_id.clone()).await;
+        op_obj(&client, db_id.clone()).await;
+        op_put(&client, db_id.clone()).await;
+        op_clear(&client, db_id.clone()).await;
+        op_stat(&client, db_id.clone()).await;
+        op_iter(&client, db_id.clone()).await;
     }
     println!("Integration testing successful.");
+    Ok(())
 }

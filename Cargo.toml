@@ -11,13 +11,14 @@ serde = "^1.0"
 serde_json = "^1.0"
 serde_derive = "^1.0"
 actix-web = { version = "4", features = ["openssl"] }
-env_logger = "0.5"
+env_logger = "^0.5"
 bytes = "0.4"
-clap = "^2.33.0"
-reqwest = "^0.9.20"
+clap = "^2.33"
+reqwest = "^0.11"
+tokio = { version = "1", features = ["full"] }
 protobuf = "3"
-sled = "^0.28.0"
-lmdb = "^0.8.0"
+sled = "^0.28"
+lmdb = "^0.8"
 openssl = "^0.10"
 
 [build-dependencies]
