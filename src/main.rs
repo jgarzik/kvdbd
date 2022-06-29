@@ -17,7 +17,7 @@ use std::{env, fs, process};
 use actix_web::http::StatusCode;
 use actix_web::{middleware, web, App, HttpRequest, HttpResponse, HttpServer};
 use openssl::ssl::{SslAcceptor, SslFiletype, SslMethod};
-use serde::{Deserialize, Serialize};
+use serde_derive::{Deserialize, Serialize};
 use serde_json::json;
 
 use protobuf::{EnumOrUnknown, Message};
