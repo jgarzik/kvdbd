@@ -695,17 +695,6 @@ async fn main() -> std::io::Result<()> {
 
     let backend_state = register_backends();
 
-    // build cli help strings
-    let help_config = format!("Sets a custom configuration file (default: {})", DEF_CFG_FN);
-    let help_bind_addr = format!(
-        "Custom server socket bind address (default: {})",
-        DEF_BIND_ADDR
-    );
-    let help_bind_port = format!(
-        "Custom server socket bind port (default: {})",
-        DEF_BIND_PORT
-    );
-
     // CLI parser static setup
     let mut cli_app = clap::App::new(APPNAME)
         .version(VERSION)
@@ -713,34 +702,37 @@ async fn main() -> std::io::Result<()> {
         .about("Database server for key/value db")
         .arg(
             clap::Arg::with_name("config")
-                .short("c")
+                .short('c')
                 .long("config")
                 .value_name("JSON-FILE")
-                .help(&help_config)
+                .help("Sets a custom configuration file")
+                .default_value(DEF_CFG_FN)
                 .takes_value(true),
         )
         .arg(
             clap::Arg::with_name("bind-addr")
                 .long("bind-addr")
                 .value_name("IP-ADDRESS")
-                .help(&help_bind_addr)
+                .help("Custom server socket bind address")
+                .default_value(DEF_BIND_ADDR)
                 .takes_value(true),
         )
         .arg(
             clap::Arg::with_name("bind-port")
                 .long("bind-port")
                 .value_name("PORT")
-                .help(&help_bind_port)
+                .help("Custom server socket bind port")
+                .default_value(DEF_BIND_PORT)
                 .takes_value(true),
         );
 
     // CLI parser dynamic setup: add zeroconf database options
     for (be_name, be_info) in &backend_state.backends {
         cli_app = cli_app.arg(
-            clap::Arg::with_name(be_name)
+            clap::Arg::new(&**be_name)
                 .long(be_name)
                 .value_name(&be_info.cli_value_name)
-                .help(&be_info.cli_help)
+                .help(&*be_info.cli_help)
                 .takes_value(true),
         );
     }
