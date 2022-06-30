@@ -27,10 +27,12 @@ RUN cargo build --release
 RUN cargo install --path .
 
 # our final base
-#FROM rust:1.49
+FROM rust:1.61-slim-buster
 
 # copy the build artifact from the build stage
-#COPY --from=build /kvdbd/target/release/kvdbd .
+COPY --from=build /usr/src/kvdbd/target/release/kvdbd .
+COPY --from=build /usr/src/kvdbd/target/release/kvdb-pb .
+COPY --from=build /usr/src/kvdbd/target/release/tester .
 
 # set the startup command to run your binary
 CMD ["kvdbd"]
