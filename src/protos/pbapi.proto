@@ -5,6 +5,7 @@ package kvdbd;
 service KeyValueDb {
   rpc DbStat(BasicRequest) returns (DbStatResponse);
   rpc Mutate(MutationRequest) returns (BasicResponse);
+  rpc Get(GetRequest) returns (GetResponse);
 }
 
 message BasicRequest {
@@ -90,5 +91,41 @@ message MutationRequest {
   MagicNum magic = 1;
 
   repeated UpdateRequest reqs = 2; // list of insert/remove operations
+}
+
+message GetOp {
+  bytes key = 1;	// record key
+}
+
+message GetRequest {
+  enum MagicNum {
+    INVALID = 0;
+    MAGIC = 65778899;
+  }
+  MagicNum magic = 1;
+
+  repeated GetOp ops = 2; // list of query operations
+}
+
+message GetOpResult {
+  bytes val = 1;	// record value
+
+  bool is_ok = 2;
+
+  enum GetErr {
+    NONE = 0;
+    KEY_NOT_FOUND = 1;
+  }
+  GetErr err = 3;
+}
+
+message GetResponse {
+  enum MagicNum {
+    INVALID = 0;
+    MAGIC = 65778809;
+  }
+  MagicNum magic = 1;
+
+  repeated GetOpResult res = 2; // list of keys
 }
 
