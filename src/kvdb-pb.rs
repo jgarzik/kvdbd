@@ -95,7 +95,7 @@ fn main() -> io::Result<()> {
     env_logger::init();
 
     // parse command line
-    let op_vals = ["get", "del", "put", "batch"];
+    let op_vals = ["get", "del", "put", "mutate"];
     let cli_matches = clap::App::new(APPNAME)
         .version(VERSION)
         .about("Wire protocol encode/decode for kvdbd")
