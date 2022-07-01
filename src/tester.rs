@@ -20,8 +20,9 @@ use reqwest::{Client, StatusCode};
 use protobuf::{EnumOrUnknown, Message};
 include!(concat!(env!("OUT_DIR"), "/protos/mod.rs"));
 use pbapi::{
-    iter_request, key_request, mutation_request, update_request, DbStatResponse, IterRequest,
-    KeyRequest, KeyResponse, MutationRequest, UpdateRequest,
+    get_op_result, get_request, get_response, iter_request, key_request, mutation_request,
+    update_request, DbStatResponse, GetOp, GetRequest, GetResponse, IterRequest, KeyRequest,
+    KeyResponse, MutationRequest, UpdateRequest,
 };
 
 struct KeyList {
@@ -40,6 +41,17 @@ fn pbenc_iter_req(start_key: Option<Vec<u8>>, prefix: Option<Vec<u8>>) -> Vec<u8
         None => out_msg.prefix = Vec::new(),
         Some(s) => out_msg.prefix = s,
     }
+    return out_msg.write_to_bytes().unwrap();
+}
+
+fn pbenc_get1_req(key: &[u8]) -> Vec<u8> {
+    let mut out_msg = GetRequest::new();
+    out_msg.magic = EnumOrUnknown::new(get_request::MagicNum::MAGIC);
+
+    let mut out_op = GetOp::new();
+    out_op.key = key.to_vec();
+    out_msg.ops.push(out_op);
+
     return out_msg.write_to_bytes().unwrap();
 }
 
@@ -125,25 +137,10 @@ async fn t_iter(client: &Client, db_id: String, start_key: Option<Vec<u8>>) -> K
 
 async fn t_get_gone(client: &Client, db_id: String, key: String) {
     let basepath = format!("{}{}/{}/", T_ENDPOINT, T_BASEURI, db_id);
-    let get_url = format!("{}get", basepath);
+    let get_url = format!("{}mget", basepath);
 
-    // encode verification get request
-    let out_bytes = pbenc_key_req(key.as_bytes());
-
-    // exec get request; key1 should not exist, following batch
-    let resp_res = client.post(&get_url).body(out_bytes).send().await;
-    match resp_res {
-        Ok(resp) => assert_eq!(resp.status(), StatusCode::NOT_FOUND),
-        Err(_e) => assert!(false),
-    }
-}
-
-async fn t_get_ok(client: &Client, db_id: String, key: String, value: String) {
-    let basepath = format!("{}{}/{}/", T_ENDPOINT, T_BASEURI, db_id);
-    let get_url = format!("{}get", basepath);
-
-    // encode verification get request
-    let out_bytes = pbenc_key_req(key.as_bytes());
+    // encode get request
+    let out_bytes = pbenc_get1_req(key.as_bytes());
 
     // exec get request; key1 should not exist, following batch
     let resp_res = client.post(&get_url).body(out_bytes.clone()).send().await;
@@ -151,8 +148,57 @@ async fn t_get_ok(client: &Client, db_id: String, key: String, value: String) {
         Ok(resp) => {
             assert_eq!(resp.status(), StatusCode::OK);
 
-            match resp.text().await {
-                Ok(body) => assert_eq!(body, value),
+            match resp.bytes().await {
+                Ok(bytes) => match GetResponse::parse_from_bytes(&bytes) {
+                    Err(_e) => assert!(false),
+                    Ok(in_resp) => {
+                        assert_eq!(
+                            in_resp.magic,
+                            EnumOrUnknown::new(get_response::MagicNum::MAGIC)
+                        );
+                        assert_eq!(in_resp.res.len(), 1);
+
+                        assert_eq!(in_resp.res[0].is_ok, false);
+                        assert_eq!(
+                            in_resp.res[0].err,
+                            EnumOrUnknown::new(get_op_result::GetErr::KEY_NOT_FOUND)
+                        );
+                    }
+                },
+                Err(_e) => assert!(false),
+            }
+        }
+        Err(_e) => assert!(false),
+    }
+}
+
+async fn t_get_ok(client: &Client, db_id: String, key: String, value: String) {
+    let basepath = format!("{}{}/{}/", T_ENDPOINT, T_BASEURI, db_id);
+    let get_url = format!("{}mget", basepath);
+
+    // encode get request
+    let out_bytes = pbenc_get1_req(key.as_bytes());
+
+    // exec get request; key1 should exist and match value, following batch
+    let resp_res = client.post(&get_url).body(out_bytes.clone()).send().await;
+    match resp_res {
+        Ok(resp) => {
+            assert_eq!(resp.status(), StatusCode::OK);
+
+            match resp.bytes().await {
+                Ok(bytes) => match GetResponse::parse_from_bytes(&bytes) {
+                    Err(_e) => assert!(false),
+                    Ok(in_resp) => {
+                        assert_eq!(
+                            in_resp.magic,
+                            EnumOrUnknown::new(get_response::MagicNum::MAGIC)
+                        );
+                        assert_eq!(in_resp.res.len(), 1);
+
+                        assert_eq!(in_resp.res[0].is_ok, true);
+                        assert_eq!(in_resp.res[0].val, value.as_bytes());
+                    }
+                },
                 Err(_e) => assert!(false),
             }
         }
