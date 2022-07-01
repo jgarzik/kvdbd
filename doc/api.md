@@ -184,6 +184,20 @@ Returns JSON describing value found and removed (if in db):
 {"result":true}
 ```
 
+### API: Multiple-GET (lookup multiple values by binary keys)
+
+Meta-request: POST http://$HOSTNAME:$PORT/api/$DB/mget
+
+Encode the key into protobuf-encoded
+data structure `GetRequest`, and POST the data to /api/$DB/mget path:
+```
+curl -X POST --data-binary @postdata http://localhost:8080/api/db/mget
+```
+
+Returns binary, protobuf-encoded data structure `GetResponse`,
+containing multiple results, in the order and number found in the
+`GetRequest` sent.
+
 ### API: GET (lookup value by binary key)
 
 Meta-request: POST http://$HOSTNAME:$PORT/api/$DB/get

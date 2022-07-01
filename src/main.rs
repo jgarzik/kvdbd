@@ -25,8 +25,9 @@ use protobuf::{EnumOrUnknown, Message};
 include!(concat!(env!("OUT_DIR"), "/protos/mod.rs"));
 
 use pbapi::{
-    db_stat_response, iter_request, key_request, key_response, mutation_request, update_request,
-    DbStatResponse, IterRequest, KeyRequest, KeyResponse, MutationRequest, UpdateRequest,
+    db_stat_response, get_op_result, get_request, get_response, iter_request, key_request,
+    key_response, mutation_request, update_request, DbStatResponse, GetOpResult, GetRequest,
+    GetResponse, IterRequest, KeyRequest, KeyResponse, MutationRequest, UpdateRequest,
 };
 
 // struct used for both input (server config file) and output (server info)
@@ -223,6 +224,19 @@ fn pbdec_update_req(wiredata: &[u8]) -> Option<UpdateRequest> {
         Err(_e) => None,
         Ok(req) => {
             if req.magic != EnumOrUnknown::new(update_request::MagicNum::MAGIC) {
+                None
+            } else {
+                Some(req)
+            }
+        }
+    }
+}
+
+fn pbdec_mget_req(wiredata: &[u8]) -> Option<GetRequest> {
+    match GetRequest::parse_from_bytes(wiredata) {
+        Err(_e) => None,
+        Ok(req) => {
+            if req.magic != EnumOrUnknown::new(get_request::MagicNum::MAGIC) {
                 None
             } else {
                 Some(req)
@@ -591,6 +605,57 @@ async fn req_get(
     }
 }
 
+/// Multiple-GET data item. key in HTTP payload, returns value in HTTP payload.
+async fn req_mget(
+    m_state: web::Data<Arc<Mutex<ServerState>>>,
+    (path, body): (web::Path<(String,)>, web::Bytes),
+) -> HttpResponse {
+    // decode protobuf msg containing key, into KeyRequest struct
+    let res = pbdec_mget_req(&body);
+    if res.is_none() {
+        return err_bad_req();
+    }
+    let in_msg = res.unwrap();
+
+    let mut out_msg = GetResponse::new();
+    out_msg.magic = EnumOrUnknown::new(get_response::MagicNum::MAGIC);
+
+    // lock runtime-live state data
+    let state = m_state.lock().unwrap();
+
+    // lookup database index by name (path elem 0)
+    let idx: usize;
+    match state.name_idx.get(&path.0) {
+        None => return err_not_found(),
+        Some(r_idx) => idx = *r_idx,
+    }
+
+    let ops = in_msg.ops.to_vec();
+    for op in &ops {
+        // attempt to read record from db, based on key (http payload)
+        match state.dbs[idx].db.get(&op.key) {
+            Ok(optval) => match optval {
+                Some(val) => {
+                    let mut out_res = GetOpResult::new();
+                    out_res.val = val;
+                    out_res.is_ok = true;
+                    out_res.err = EnumOrUnknown::new(get_op_result::GetErr::NONE);
+                    out_msg.res.push(out_res);
+                }
+                None => {
+                    let mut out_res = GetOpResult::new();
+                    out_res.is_ok = false;
+                    out_res.err = EnumOrUnknown::new(get_op_result::GetErr::KEY_NOT_FOUND);
+                    out_msg.res.push(out_res);
+                }
+            },
+            Err(_e) => return err_500(), // db: error
+        }
+    }
+
+    ok_binary(out_msg.write_to_bytes().unwrap())
+}
+
 /// atomic PUT of multiple data items. data items in HTTP payload. ret json ok.
 async fn req_mutate(
     m_state: web::Data<Arc<Mutex<ServerState>>>,
@@ -828,6 +893,7 @@ async fn main() -> std::io::Result<()> {
             .service(web::resource("/api/{db}/clear").route(web::post().to(req_clear)))
             .service(web::resource("/api/{db}/del").route(web::post().to(req_del)))
             .service(web::resource("/api/{db}/get").route(web::post().to(req_get)))
+            .service(web::resource("/api/{db}/mget").route(web::post().to(req_mget)))
             .service(web::resource("/api/{db}/keys.json").route(web::get().to(req_keys_json)))
             .service(web::resource("/api/{db}/keys").route(web::post().to(req_keys)))
             .service(
