@@ -20,8 +20,8 @@ use reqwest::{Client, StatusCode};
 use protobuf::{EnumOrUnknown, Message};
 include!(concat!(env!("OUT_DIR"), "/protos/mod.rs"));
 use pbapi::{
-    batch_request, iter_request, key_request, update_request, BatchRequest, DbStatResponse,
-    IterRequest, KeyRequest, KeyResponse, UpdateRequest,
+    iter_request, key_request, mutation_request, update_request, DbStatResponse, IterRequest,
+    KeyRequest, KeyResponse, MutationRequest, UpdateRequest,
 };
 
 struct KeyList {
@@ -253,14 +253,14 @@ async fn t_del_gone(client: &Client, db_id: String, key: String) {
 
 async fn op_batch(client: &Client, db_id: String) {
     let basepath = format!("{}{}/{}/", T_ENDPOINT, T_BASEURI, db_id);
-    let batch_url = format!("{}batch", basepath);
+    let mutate_url = format!("{}mutate", basepath);
     let test_key = String::from("op_batch_key1");
     let test_value = format!("helloworld op_put {}", db_id);
 
     t_put(client, db_id.clone(), test_key.clone(), test_value).await;
 
-    let mut out_msg = BatchRequest::new();
-    out_msg.magic = EnumOrUnknown::new(batch_request::MagicNum::MAGIC);
+    let mut out_msg = MutationRequest::new();
+    out_msg.magic = EnumOrUnknown::new(mutation_request::MagicNum::MAGIC);
 
     // op1: delete
     let req = pbenc_update_del("op_batch_key1".as_bytes());
@@ -277,7 +277,7 @@ async fn op_batch(client: &Client, db_id: String) {
     let out_bytes: Vec<u8> = out_msg.write_to_bytes().unwrap();
 
     // exec batch request
-    let resp_res = client.post(&batch_url).body(out_bytes).send().await;
+    let resp_res = client.post(&mutate_url).body(out_bytes).send().await;
     match resp_res {
         Ok(resp) => {
             assert_eq!(resp.status(), StatusCode::OK);

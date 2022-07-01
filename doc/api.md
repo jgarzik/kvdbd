@@ -15,7 +15,7 @@ Connect to HTTP endpoint using any web client.
    * [API: PUT - store key and value](#api-put---store-key-and-value)
    * [API: STAT.json - database statistics](#api-statjson---database-statistics)
 * [REST/Protobufs API](#restprotobufs-api)
-   * [API: BATCH-UPDATE - atomic update of many records](#api-batch-update---atomic-update-of-many-records)
+   * [API: MUTATE - atomic update of many records](#api-batch-update---atomic-update-of-many-records)
    * [API: DELETE - remove record, based on binary key](#api-delete---remove-record-based-on-binary-key)
    * [API: GET (lookup value by binary key)](#api-get-lookup-value-by-binary-key)
    * [API: KEYS - sequential list of keys in database](#api-keys---sequential-list-of-keys-in-database)
@@ -154,14 +154,14 @@ Returns JSON object containing a record count, and other db metadata.
 
 ## REST/Protobufs API
 
-### API: BATCH-UPDATE - atomic update of many records
+### API: MUTATE - atomic update of many records
 
-Meta-request: POST http://$HOSTNAME:$PORT/api/$DB/batch
+Meta-request: POST http://$HOSTNAME:$PORT/api/$DB/mutate
 
 Encode the keys/values/ into protobuf-encoded
-data structure `BatchRequest`, and POST the data to /api/$DB/batch path:
+data structure `BatchRequest`, and POST the data to /api/$DB/mutate path:
 ```
-curl -X POST --data-binary @postdata http://localhost:8080/api/db/batch
+curl -X POST --data-binary @postdata http://localhost:8080/api/db/mutate
 ```
 
 Returns JSON indicating success:

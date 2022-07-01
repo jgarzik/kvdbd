@@ -25,8 +25,8 @@ use protobuf::{EnumOrUnknown, Message};
 include!(concat!(env!("OUT_DIR"), "/protos/mod.rs"));
 
 use pbapi::{
-    batch_request, db_stat_response, iter_request, key_request, key_response, update_request,
-    BatchRequest, DbStatResponse, IterRequest, KeyRequest, KeyResponse, UpdateRequest,
+    db_stat_response, iter_request, key_request, key_response, mutation_request, update_request,
+    DbStatResponse, IterRequest, KeyRequest, KeyResponse, MutationRequest, UpdateRequest,
 };
 
 // struct used for both input (server config file) and output (server info)
@@ -231,11 +231,11 @@ fn pbdec_update_req(wiredata: &[u8]) -> Option<UpdateRequest> {
     }
 }
 
-fn pbdec_batch_req(wiredata: &[u8]) -> Option<BatchRequest> {
-    match BatchRequest::parse_from_bytes(wiredata) {
+fn pbdec_mutate_req(wiredata: &[u8]) -> Option<MutationRequest> {
+    match MutationRequest::parse_from_bytes(wiredata) {
         Err(_e) => None,
         Ok(req) => {
-            if req.magic != EnumOrUnknown::new(batch_request::MagicNum::MAGIC) {
+            if req.magic != EnumOrUnknown::new(mutation_request::MagicNum::MAGIC) {
                 None
             } else {
                 Some(req)
@@ -592,12 +592,12 @@ async fn req_get(
 }
 
 /// atomic PUT of multiple data items. data items in HTTP payload. ret json ok.
-async fn req_batch(
+async fn req_mutate(
     m_state: web::Data<Arc<Mutex<ServerState>>>,
     (path, body): (web::Path<(String,)>, web::Bytes),
 ) -> HttpResponse {
     // decode protobuf msg containing key/value pairs
-    let res = pbdec_batch_req(&body);
+    let res = pbdec_mutate_req(&body);
     if res.is_none() {
         return err_bad_req();
     }
@@ -824,7 +824,7 @@ async fn main() -> std::io::Result<()> {
             .wrap(middleware::Logger::default())
             // register our routes
             .service(req_index)
-            .service(web::resource("/api/{db}/batch").route(web::post().to(req_batch)))
+            .service(web::resource("/api/{db}/mutate").route(web::post().to(req_mutate)))
             .service(web::resource("/api/{db}/clear").route(web::post().to(req_clear)))
             .service(web::resource("/api/{db}/del").route(web::post().to(req_del)))
             .service(web::resource("/api/{db}/get").route(web::post().to(req_get)))

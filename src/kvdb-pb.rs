@@ -9,7 +9,7 @@ use std::{env, io, process};
 
 use protobuf::Message;
 include!(concat!(env!("OUT_DIR"), "/protos/mod.rs"));
-use pbapi::{BatchRequest, KeyRequest, UpdateRequest};
+use pbapi::{KeyRequest, MutationRequest, UpdateRequest};
 
 fn stdout_bytes(b: &[u8]) -> io::Result<()> {
     use std::os::unix::io::FromRawFd;
@@ -44,7 +44,7 @@ fn encode_batch(batch_path: String) -> io::Result<()> {
     let file = File::open(batch_path)?;
     let mut reader = BufReader::new(file);
 
-    let mut out_msg = BatchRequest::new();
+    let mut out_msg = MutationRequest::new();
 
     loop {
         let mut line = String::new();
@@ -133,8 +133,8 @@ fn main() -> io::Result<()> {
                 .takes_value(true),
         )
         .arg(
-            clap::Arg::with_name("batch")
-                .long("batch")
+            clap::Arg::with_name("mutate")
+                .long("mutate")
                 .value_name("KEY-VALUE-FILE")
                 .help("Import stream of key/value put/del mutations")
                 .takes_value(true),
@@ -168,12 +168,12 @@ fn main() -> io::Result<()> {
                 let val = cli_matches.value_of("value").unwrap();
                 return encode_put(key.to_string(), val.to_string());
             }
-            "batch" => {
-                if !cli_matches.is_present("batch") {
-                    println!("Missing --batch");
+            "mutate" => {
+                if !cli_matches.is_present("mutate") {
+                    println!("Missing --mutate");
                     process::exit(1);
                 }
-                let batch_path = cli_matches.value_of("batch").unwrap();
+                let batch_path = cli_matches.value_of("mutate").unwrap();
                 return encode_batch(batch_path.to_string());
             }
             _ => {

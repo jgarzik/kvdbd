@@ -1,5 +1,33 @@
 syntax = "proto3";
 
+package kvdbd;
+
+service KeyValueDb {
+  rpc DbStat(BasicRequest) returns (DbStatResponse);
+  rpc Mutate(MutationRequest) returns (BasicResponse);
+}
+
+message BasicRequest {
+  enum MagicNum {
+    INVALID = 0;
+    MAGIC = 13243648;
+  }
+  MagicNum magic = 1;
+}
+
+message BasicResponse {
+  enum MagicNum {
+    INVALID = 0;
+    MAGIC = 13243649;
+  }
+  MagicNum magic = 1;
+
+  bool is_ok = 2;
+
+  sint32 err_code = 3;
+  string err_msg = 4;
+}
+
 message DbStatResponse {
   enum MagicNum {
     INVALID = 0;
@@ -54,7 +82,7 @@ message UpdateRequest {
   bool is_insert = 4;	// insert(true) or remove(false)
 }
 
-message BatchRequest {
+message MutationRequest {
   enum MagicNum {
     INVALID = 0;
     MAGIC = 66778899;
