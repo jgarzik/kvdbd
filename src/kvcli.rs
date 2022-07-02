@@ -1,6 +1,6 @@
 extern crate clap;
 
-const APPNAME: &'static str = "kvdb-pb";
+const APPNAME: &'static str = "kvcli";
 const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
 use std::fs::File;

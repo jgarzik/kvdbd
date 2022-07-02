@@ -33,8 +33,8 @@ name = "kvdbd"
 path = "src/main.rs"
 
 [[bin]]
-name = "kvdb-pb"
-path = "src/kvdb-pb.rs"
+name = "kvcli"
+path = "src/kvcli.rs"
 
 [[bin]]
 name = "tester"
