@@ -20,9 +20,147 @@ use reqwest::{Client, StatusCode};
 use protobuf::{EnumOrUnknown, Message};
 include!(concat!(env!("OUT_DIR"), "/protos/mod.rs"));
 use pbapi::{
-    batch_request, iter_request, key_request, update_request, BatchRequest, DbStatResponse,
-    IterRequest, KeyRequest, KeyResponse, UpdateRequest,
+    get_op_result, get_request, get_response, iter_request, key_request, mutation_request,
+    update_request, DbStatResponse, GetOp, GetRequest, GetResponse, IterRequest, IterResponse,
+    KeyRequest, MutationRequest, UpdateRequest,
 };
+
+struct KvdbClient {
+    client: reqwest::Client,
+    db_id: String,
+}
+
+impl KvdbClient {
+    pub fn new(db_id_: String) -> KvdbClient {
+        KvdbClient {
+            client: reqwest::Client::builder()
+                .danger_accept_invalid_certs(true)
+                .build()
+                .unwrap(),
+            db_id: db_id_.clone(),
+        }
+    }
+
+    pub async fn get1(&mut self, key: String) -> Option<Vec<u8>> {
+        let basepath = format!("{}{}/{}/", T_ENDPOINT, T_BASEURI, self.db_id);
+        let get_url = format!("{}mget", basepath);
+
+        // encode get request
+        let out_bytes = pbenc_get1_req(key.as_bytes(), false);
+
+        // exec get request; key1 should exist and match value, following batch
+        let resp_res = self
+            .client
+            .post(&get_url)
+            .body(out_bytes.clone())
+            .send()
+            .await;
+        match resp_res {
+            Ok(resp) => {
+                if resp.status() != StatusCode::OK {
+                    return None;
+                }
+
+                match resp.bytes().await {
+                    Ok(bytes) => match GetResponse::parse_from_bytes(&bytes) {
+                        Err(_e) => None,
+                        Ok(in_resp) => {
+                            if in_resp.magic != EnumOrUnknown::new(get_response::MagicNum::MAGIC)
+                                || in_resp.res.len() != 1
+                                || !in_resp.res[0].is_ok
+                            {
+                                None
+                            } else {
+                                Some(in_resp.res[0].val.clone())
+                            }
+                        }
+                    },
+                    Err(_e) => None,
+                }
+            }
+            Err(_e) => None,
+        }
+    }
+
+    pub async fn mutate(&mut self, mut_req: &MutationRequest) -> bool {
+        let basepath = format!("{}{}/{}/", T_ENDPOINT, T_BASEURI, self.db_id);
+        let mutate_url = format!("{}mutate", basepath);
+
+        // encode mutation request
+        let out_bytes = mut_req.write_to_bytes().unwrap();
+
+        // exec mutation request
+        let resp_res = self.client.post(&mutate_url).body(out_bytes).send().await;
+        match resp_res {
+            Ok(resp) => {
+                if resp.status() == StatusCode::OK {
+                    match resp.text().await {
+                        Ok(_body) => true,
+                        Err(_e) => false,
+                    }
+                } else {
+                    false
+                }
+            }
+            Err(_e) => false,
+        }
+    }
+
+    pub async fn put1(&mut self, key: String, value: String) -> bool {
+        // encode put request
+        let out_req = pbenc_mutate_ins1(key.as_bytes(), value.as_bytes());
+
+        self.mutate(&out_req).await
+    }
+
+    pub async fn del1(&mut self, key: String) -> bool {
+        let basepath = format!("{}{}/{}/", T_ENDPOINT, T_BASEURI, self.db_id);
+        let del_url = format!("{}del", basepath);
+
+        // encode del request
+        let out_bytes = pbenc_key_req(key.as_bytes());
+
+        // exec del request
+        let resp_res = self.client.post(&del_url).body(out_bytes).send().await;
+        match resp_res {
+            Ok(resp) => {
+                if resp.status() == StatusCode::OK {
+                    match resp.text().await {
+                        Ok(_body) => true,
+                        Err(_e) => false,
+                    }
+                } else {
+                    false
+                }
+            }
+            Err(_e) => false,
+        }
+    }
+
+    pub async fn stat(&mut self) -> Option<DbStatResponse> {
+        let basepath = format!("{}{}/{}/", T_ENDPOINT, T_BASEURI, self.db_id);
+        let stat_url = format!("{}stat", basepath);
+
+        // exec db-stat request
+        let resp_res = self.client.get(&stat_url).send().await;
+        if resp_res.is_err() {
+            return None;
+        }
+        let resp = resp_res.unwrap();
+        if resp.status() != StatusCode::OK {
+            return None;
+        }
+
+        // decode protobuf list-of-keys response
+        match resp.bytes().await {
+            Ok(bytes) => match DbStatResponse::parse_from_bytes(&bytes) {
+                Err(_e) => None,
+                Ok(req) => Some(req),
+            },
+            Err(_e) => return None,
+        }
+    }
+}
 
 struct KeyList {
     keys: Vec<Vec<u8>>,
@@ -43,11 +181,38 @@ fn pbenc_iter_req(start_key: Option<Vec<u8>>, prefix: Option<Vec<u8>>) -> Vec<u8
     return out_msg.write_to_bytes().unwrap();
 }
 
+fn pbenc_get1_req(key: &[u8], skip_val: bool) -> Vec<u8> {
+    let mut out_msg = GetRequest::new();
+    out_msg.magic = EnumOrUnknown::new(get_request::MagicNum::MAGIC);
+
+    let mut out_op = GetOp::new();
+    out_op.key = key.to_vec();
+    out_op.skip_val = skip_val;
+    out_msg.ops.push(out_op);
+
+    return out_msg.write_to_bytes().unwrap();
+}
+
 fn pbenc_key_req(key: &[u8]) -> Vec<u8> {
     let mut out_msg = KeyRequest::new();
     out_msg.magic = EnumOrUnknown::new(key_request::MagicNum::MAGIC);
     out_msg.key = key.to_vec();
     return out_msg.write_to_bytes().unwrap();
+}
+
+fn pbenc_mutate_ins1(key: &[u8], val: &[u8]) -> MutationRequest {
+    let mut out_msg = MutationRequest::new();
+    out_msg.magic = EnumOrUnknown::new(mutation_request::MagicNum::MAGIC);
+
+    let mut out_upd = UpdateRequest::new();
+    out_upd.magic = EnumOrUnknown::new(update_request::MagicNum::MAGIC);
+    out_upd.key = key.to_vec();
+    out_upd.value = val.to_vec();
+    out_upd.is_insert = true;
+
+    out_msg.reqs.push(out_upd);
+
+    out_msg
 }
 
 fn pbenc_update_ins(key: &[u8], val: &[u8]) -> UpdateRequest {
@@ -76,13 +241,13 @@ fn pbenc_update_req(key: &[u8], val: &[u8]) -> Vec<u8> {
 
 async fn t_iter(client: &Client, db_id: String, start_key: Option<Vec<u8>>) -> KeyList {
     let basepath = format!("{}{}/{}/", T_ENDPOINT, T_BASEURI, db_id);
-    let keys_url = format!("{}keys", basepath);
+    let iter_url = format!("{}iter", basepath);
 
     // encode keys request
     let out_bytes = pbenc_iter_req(start_key, None);
 
     // exec keys request; check for successful response
-    let resp_res = client.post(&keys_url).body(out_bytes).send().await;
+    let resp_res = client.post(&iter_url).body(out_bytes).send().await;
     if resp_res.is_err() {
         assert!(false);
     }
@@ -101,7 +266,7 @@ async fn t_iter(client: &Client, db_id: String, start_key: Option<Vec<u8>>) -> K
     }
 
     let in_msg;
-    match KeyResponse::parse_from_bytes(&bytes) {
+    match IterResponse::parse_from_bytes(&bytes) {
         Err(_e) => {
             assert!(false);
             panic!("silence E0381 warning");
@@ -125,25 +290,10 @@ async fn t_iter(client: &Client, db_id: String, start_key: Option<Vec<u8>>) -> K
 
 async fn t_get_gone(client: &Client, db_id: String, key: String) {
     let basepath = format!("{}{}/{}/", T_ENDPOINT, T_BASEURI, db_id);
-    let get_url = format!("{}get", basepath);
+    let get_url = format!("{}mget", basepath);
 
-    // encode verification get request
-    let out_bytes = pbenc_key_req(key.as_bytes());
-
-    // exec get request; key1 should not exist, following batch
-    let resp_res = client.post(&get_url).body(out_bytes).send().await;
-    match resp_res {
-        Ok(resp) => assert_eq!(resp.status(), StatusCode::NOT_FOUND),
-        Err(_e) => assert!(false),
-    }
-}
-
-async fn t_get_ok(client: &Client, db_id: String, key: String, value: String) {
-    let basepath = format!("{}{}/{}/", T_ENDPOINT, T_BASEURI, db_id);
-    let get_url = format!("{}get", basepath);
-
-    // encode verification get request
-    let out_bytes = pbenc_key_req(key.as_bytes());
+    // encode get request
+    let out_bytes = pbenc_get1_req(key.as_bytes(), true);
 
     // exec get request; key1 should not exist, following batch
     let resp_res = client.post(&get_url).body(out_bytes.clone()).send().await;
@@ -151,8 +301,57 @@ async fn t_get_ok(client: &Client, db_id: String, key: String, value: String) {
         Ok(resp) => {
             assert_eq!(resp.status(), StatusCode::OK);
 
-            match resp.text().await {
-                Ok(body) => assert_eq!(body, value),
+            match resp.bytes().await {
+                Ok(bytes) => match GetResponse::parse_from_bytes(&bytes) {
+                    Err(_e) => assert!(false),
+                    Ok(in_resp) => {
+                        assert_eq!(
+                            in_resp.magic,
+                            EnumOrUnknown::new(get_response::MagicNum::MAGIC)
+                        );
+                        assert_eq!(in_resp.res.len(), 1);
+
+                        assert_eq!(in_resp.res[0].is_ok, false);
+                        assert_eq!(
+                            in_resp.res[0].err,
+                            EnumOrUnknown::new(get_op_result::GetErr::KEY_NOT_FOUND)
+                        );
+                    }
+                },
+                Err(_e) => assert!(false),
+            }
+        }
+        Err(_e) => assert!(false),
+    }
+}
+
+async fn t_get_ok(client: &Client, db_id: String, key: String, value: String) {
+    let basepath = format!("{}{}/{}/", T_ENDPOINT, T_BASEURI, db_id);
+    let get_url = format!("{}mget", basepath);
+
+    // encode get request
+    let out_bytes = pbenc_get1_req(key.as_bytes(), false);
+
+    // exec get request; key1 should exist and match value, following batch
+    let resp_res = client.post(&get_url).body(out_bytes.clone()).send().await;
+    match resp_res {
+        Ok(resp) => {
+            assert_eq!(resp.status(), StatusCode::OK);
+
+            match resp.bytes().await {
+                Ok(bytes) => match GetResponse::parse_from_bytes(&bytes) {
+                    Err(_e) => assert!(false),
+                    Ok(in_resp) => {
+                        assert_eq!(
+                            in_resp.magic,
+                            EnumOrUnknown::new(get_response::MagicNum::MAGIC)
+                        );
+                        assert_eq!(in_resp.res.len(), 1);
+
+                        assert_eq!(in_resp.res[0].is_ok, true);
+                        assert_eq!(in_resp.res[0].val, value.as_bytes());
+                    }
+                },
                 Err(_e) => assert!(false),
             }
         }
@@ -251,16 +450,14 @@ async fn t_del_gone(client: &Client, db_id: String, key: String) {
     }
 }
 
-async fn op_batch(client: &Client, db_id: String) {
-    let basepath = format!("{}{}/{}/", T_ENDPOINT, T_BASEURI, db_id);
-    let batch_url = format!("{}batch", basepath);
+async fn op_batch(kvdb_client: &mut KvdbClient, client: &Client, db_id: String) {
     let test_key = String::from("op_batch_key1");
     let test_value = format!("helloworld op_put {}", db_id);
 
     t_put(client, db_id.clone(), test_key.clone(), test_value).await;
 
-    let mut out_msg = BatchRequest::new();
-    out_msg.magic = EnumOrUnknown::new(batch_request::MagicNum::MAGIC);
+    let mut out_msg = MutationRequest::new();
+    out_msg.magic = EnumOrUnknown::new(mutation_request::MagicNum::MAGIC);
 
     // op1: delete
     let req = pbenc_update_del("op_batch_key1".as_bytes());
@@ -274,21 +471,9 @@ async fn op_batch(client: &Client, db_id: String) {
     let req = pbenc_update_ins("op_batch_key3".as_bytes(), "op_batch_value3".as_bytes());
     out_msg.reqs.push(req);
 
-    let out_bytes: Vec<u8> = out_msg.write_to_bytes().unwrap();
-
     // exec batch request
-    let resp_res = client.post(&batch_url).body(out_bytes).send().await;
-    match resp_res {
-        Ok(resp) => {
-            assert_eq!(resp.status(), StatusCode::OK);
-
-            match resp.text().await {
-                Ok(_body) => {}
-                Err(_e) => assert!(false),
-            }
-        }
-        Err(_e) => assert!(false),
-    }
+    let res = kvdb_client.mutate(&out_msg).await;
+    assert_eq!(res, true);
 
     t_get_gone(client, db_id.clone(), test_key.clone()).await;
     t_get_ok(
@@ -319,44 +504,19 @@ async fn op_del(client: &Client, db_id: String) {
     t_del_gone(client, db_id, test_key).await;
 }
 
-async fn op_stat(client: &Client, db_id: String) {
+async fn op_stat(kvdb_client: &mut KvdbClient) {
     let test_key = String::from("op_stat_key1");
-    let test_value = format!("helloworld op_stat {}", db_id);
+    let test_value = format!("hllworld op_stat {}", kvdb_client.db_id.clone());
 
-    t_put(client, db_id.clone(), test_key.clone(), test_value).await;
-
-    let basepath = format!("{}{}/{}/", T_ENDPOINT, T_BASEURI, db_id);
-    let stat_url = format!("{}stat", basepath);
+    let res = kvdb_client.put1(test_key.clone(), test_value.clone()).await;
+    assert_eq!(res, true);
 
     // exec db-stat request
-    let resp_res = client.get(&stat_url).send().await;
-    if resp_res.is_err() {
+    let resp_res = kvdb_client.stat().await;
+    if resp_res.is_none() {
         assert!(false);
     }
-    let resp = resp_res.unwrap();
-    assert_eq!(resp.status(), StatusCode::OK);
-
-    // decode protobuf list-of-keys response
-    let bytes_res = resp.bytes().await;
-    let bytes;
-    match bytes_res {
-        Ok(bytes_) => bytes = bytes_,
-        Err(_e) => {
-            assert!(false);
-            panic!("silence E0381 warning");
-        }
-    }
-
-    let in_msg;
-    match DbStatResponse::parse_from_bytes(&bytes) {
-        Err(_e) => {
-            assert!(false);
-            panic!("silence E0381 warning");
-        }
-        Ok(req) => {
-            in_msg = req;
-        }
-    }
+    let in_msg = resp_res.unwrap();
 
     assert_eq!(in_msg.n_records, 1);
 }
@@ -401,15 +561,26 @@ async fn op_iter(client: &Client, db_id: String) {
     }
 }
 
-async fn op_get(client: &Client, db_id: String) {
+async fn op_get(kvdb_client: &mut KvdbClient) {
     let test_key = String::from("op_key1");
-    let test_value = format!("helloworld op_get {}", db_id);
+    let test_value = format!("helloworld op_get {}", kvdb_client.db_id);
 
-    t_get_gone(client, db_id.clone(), test_key.clone()).await;
-    t_put(client, db_id.clone(), test_key.clone(), test_value.clone()).await;
-    t_get_ok(client, db_id.clone(), test_key.clone(), test_value).await;
-    t_del(client, db_id.clone(), test_key.clone()).await;
-    t_get_gone(client, db_id, test_key).await;
+    let res = kvdb_client.get1(test_key.clone()).await;
+    assert_eq!(res, None);
+
+    let res = kvdb_client.put1(test_key.clone(), test_value.clone()).await;
+    assert_eq!(res, true);
+
+    let res = kvdb_client.get1(test_key.clone()).await;
+    assert_ne!(res, None);
+    let res_value = res.unwrap();
+    assert_eq!(test_value.as_bytes(), res_value);
+
+    let res = kvdb_client.del1(test_key.clone()).await;
+    assert_eq!(res, true);
+
+    let res = kvdb_client.get1(test_key.clone()).await;
+    assert_eq!(res, None);
 }
 
 async fn op_clear(client: &Client, db_id: String) {
@@ -435,8 +606,6 @@ async fn op_clear(client: &Client, db_id: String) {
 async fn op_put(client: &Client, db_id: String) {
     let basepath = format!("{}{}/{}/", T_ENDPOINT, T_BASEURI, db_id);
     let put_url = format!("{}put", basepath);
-    let get_url = format!("{}get", basepath);
-    let del_url = format!("{}del", basepath);
     let test_key = String::from("op_put_key");
     let test_value = format!("helloworld op_put {}", db_id);
 
@@ -458,111 +627,8 @@ async fn op_put(client: &Client, db_id: String) {
     }
 
     // encode verification get request
-    let out_bytes = pbenc_key_req(test_key.as_bytes());
-
-    // exec get request
-    let resp_res = client.post(&get_url).body(out_bytes.clone()).send().await;
-    match resp_res {
-        Ok(resp) => {
-            assert_eq!(resp.status(), StatusCode::OK);
-
-            match resp.text().await {
-                Ok(body) => assert_eq!(body, test_value),
-                Err(_e) => assert!(false),
-            }
-        }
-        Err(_e) => assert!(false),
-    }
-
-    // re-use same KeyRequest bytes for our delete request
-
-    // exec del request
-    let resp_res = client.post(&del_url).body(out_bytes).send().await;
-    match resp_res {
-        Ok(resp) => assert_eq!(resp.status(), StatusCode::OK),
-        Err(_e) => assert!(false),
-    }
-}
-
-async fn op_obj(client: &Client, db_id: String) {
-    let basepath = format!("{}{}/{}/", T_ENDPOINT, T_BASEURI, db_id);
-    let test_key = String::from("1");
-    let test_value = format!("helloworld {}", db_id);
-
-    // Check that a record with key 1 doesn't exist.
-    let url = format!("{}obj/{}", basepath, test_key);
-    let resp_res = client.get(&url).send().await;
-    match resp_res {
-        Ok(resp) => assert_eq!(resp.status(), StatusCode::NOT_FOUND),
-        Err(_e) => assert!(false),
-    }
-
-    // verify DELETE(non exist) returns not-found
-    let resp_res = client.delete(&url).send().await;
-    match resp_res {
-        Ok(resp) => assert_eq!(resp.status(), StatusCode::NOT_FOUND),
-        Err(_e) => assert!(false),
-    }
-
-    // PUT a new record
-    let resp_res = client.put(&url).body(test_value.clone()).send().await;
-    match resp_res {
-        Ok(resp) => assert_eq!(resp.status(), StatusCode::OK),
-        Err(_e) => assert!(false),
-    }
-
-    // Check that the record exists with the correct contents.
-    let resp_res = client.get(&url).send().await;
-    match resp_res {
-        Ok(resp) => {
-            assert_eq!(resp.status(), StatusCode::OK);
-
-            match resp.text().await {
-                Ok(body) => assert_eq!(body, test_value),
-                Err(_e) => assert!(false),
-            }
-        }
-        Err(_e) => assert!(false),
-    }
-
-    // Check that the record exists with the correct contents,
-    // protobuf-style.
-    let out_bytes = pbenc_key_req(test_key.as_bytes());
-
-    let get_pb_url = format!("{}get", basepath);
-    let resp_res = client.post(&get_pb_url).body(out_bytes).send().await;
-    match resp_res {
-        Ok(resp) => {
-            assert_eq!(resp.status(), StatusCode::OK);
-
-            match resp.text().await {
-                Ok(body) => assert_eq!(body, test_value),
-                Err(_e) => assert!(false),
-            }
-        }
-        Err(_e) => assert!(false),
-    }
-
-    // DELETE record
-    let resp_res = client.delete(&url).send().await;
-    match resp_res {
-        Ok(resp) => assert_eq!(resp.status(), StatusCode::OK),
-        Err(_e) => assert!(false),
-    }
-
-    // Check (again) that a record with key 1 doesn't exist.
-    let resp_res = client.get(&url).send().await;
-    match resp_res {
-        Ok(resp) => assert_eq!(resp.status(), StatusCode::NOT_FOUND),
-        Err(_e) => assert!(false),
-    }
-
-    // verify (again) DELETE(non exist) returns not-found
-    let resp_res = client.delete(&url).send().await;
-    match resp_res {
-        Ok(resp) => assert_eq!(resp.status(), StatusCode::NOT_FOUND),
-        Err(_e) => assert!(false),
-    }
+    t_get_ok(&client, db_id.clone(), test_key.clone(), test_value).await;
+    t_del(&client, db_id.clone(), test_key).await;
 }
 
 #[tokio::main]
@@ -586,13 +652,14 @@ async fn main() -> Result<(), reqwest::Error> {
     for n in 1..3 {
         let db_id = format!("db{}", n);
 
-        op_batch(&client, db_id.clone()).await;
+        let mut kvdb_client = KvdbClient::new(db_id.clone());
+
+        op_batch(&mut kvdb_client, &client, db_id.clone()).await;
         op_del(&client, db_id.clone()).await;
-        op_get(&client, db_id.clone()).await;
-        op_obj(&client, db_id.clone()).await;
+        op_get(&mut kvdb_client).await;
         op_put(&client, db_id.clone()).await;
         op_clear(&client, db_id.clone()).await;
-        op_stat(&client, db_id.clone()).await;
+        op_stat(&mut kvdb_client).await;
         op_iter(&client, db_id.clone()).await;
     }
     println!("Integration testing successful.");

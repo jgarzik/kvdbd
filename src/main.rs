@@ -15,7 +15,7 @@ use std::sync::{Arc, Mutex};
 use std::{env, fs, process};
 
 use actix_web::http::StatusCode;
-use actix_web::{middleware, web, App, HttpRequest, HttpResponse, HttpServer};
+use actix_web::{middleware, web, App, HttpResponse, HttpServer};
 use openssl::ssl::{SslAcceptor, SslFiletype, SslMethod};
 use serde_derive::{Deserialize, Serialize};
 use serde_json::json;
@@ -25,8 +25,9 @@ use protobuf::{EnumOrUnknown, Message};
 include!(concat!(env!("OUT_DIR"), "/protos/mod.rs"));
 
 use pbapi::{
-    batch_request, db_stat_response, iter_request, key_request, key_response, update_request,
-    BatchRequest, DbStatResponse, IterRequest, KeyRequest, KeyResponse, UpdateRequest,
+    db_stat_response, get_op_result, get_request, get_response, iter_request, iter_response,
+    key_request, mutation_request, update_request, DbStatResponse, GetOpResult, GetRequest,
+    GetResponse, IterRequest, IterResponse, KeyRequest, MutationRequest, UpdateRequest,
 };
 
 // struct used for both input (server config file) and output (server info)
@@ -73,13 +74,6 @@ struct ServerInfo {
 #[derive(Serialize, Deserialize)]
 struct DbStatResponseJson {
     n_records: String, // some JSON impl have trouble with big ints
-}
-
-// JSON response to KEYS API request
-#[derive(Serialize, Deserialize)]
-struct KeyResponseJson {
-    keys: Vec<String>,
-    list_end: bool,
 }
 
 // per-db runtime state info
@@ -180,9 +174,9 @@ fn pbenc_db_stat_resp(n_records: u64) -> Vec<u8> {
     return out_msg.write_to_bytes().unwrap();
 }
 
-fn pbenc_keys_resp(key_list: &db::api::KeyList) -> Vec<u8> {
-    let mut out_msg = KeyResponse::new();
-    out_msg.magic = EnumOrUnknown::new(key_response::MagicNum::MAGIC);
+fn pbenc_iter_resp(key_list: &db::api::KeyList) -> Vec<u8> {
+    let mut out_msg = IterResponse::new();
+    out_msg.magic = EnumOrUnknown::new(iter_response::MagicNum::MAGIC);
 
     for key in &key_list.keys {
         out_msg.keys.push(key.clone());
@@ -231,11 +225,24 @@ fn pbdec_update_req(wiredata: &[u8]) -> Option<UpdateRequest> {
     }
 }
 
-fn pbdec_batch_req(wiredata: &[u8]) -> Option<BatchRequest> {
-    match BatchRequest::parse_from_bytes(wiredata) {
+fn pbdec_mget_req(wiredata: &[u8]) -> Option<GetRequest> {
+    match GetRequest::parse_from_bytes(wiredata) {
         Err(_e) => None,
         Ok(req) => {
-            if req.magic != EnumOrUnknown::new(batch_request::MagicNum::MAGIC) {
+            if req.magic != EnumOrUnknown::new(get_request::MagicNum::MAGIC) {
+                None
+            } else {
+                Some(req)
+            }
+        }
+    }
+}
+
+fn pbdec_mutate_req(wiredata: &[u8]) -> Option<MutationRequest> {
+    match MutationRequest::parse_from_bytes(wiredata) {
+        Err(_e) => None,
+        Ok(req) => {
+            if req.magic != EnumOrUnknown::new(mutation_request::MagicNum::MAGIC) {
                 None
             } else {
                 Some(req)
@@ -368,7 +375,7 @@ async fn req_stat_json(
 }
 
 /// Sequential iteration through all KEYS in db. Start-key in HTTP payload.
-async fn req_keys(
+async fn req_iter(
     m_state: web::Data<Arc<Mutex<ServerState>>>,
     (path, body): (web::Path<(String,)>, web::Bytes),
 ) -> HttpResponse {
@@ -404,77 +411,9 @@ async fn req_keys(
 
     // encode protobuf output to bytes
     let key_list = res.unwrap();
-    let out_bytes = pbenc_keys_resp(&key_list);
+    let out_bytes = pbenc_iter_resp(&key_list);
 
     ok_binary(out_bytes)
-}
-
-/// Sequential iteration through all KEYS in db. Start-key in HTTP payload.
-async fn req_keys_json(
-    m_state: web::Data<Arc<Mutex<ServerState>>>,
-    req: HttpRequest,
-    path: web::Path<(String,)>,
-) -> HttpResponse {
-    let mut lastkey: Option<Vec<u8>> = None;
-
-    // query string continues previous search
-    let qs = req.query_string();
-    if qs.find("&") != None {
-        // we only support a single key=value param
-        return err_bad_req();
-    }
-    let searchkey = "lastkey=";
-    if qs.len() > 0 {
-        if qs.len() < searchkey.len() {
-            return err_bad_req();
-        }
-        let key = &qs[0..searchkey.len()];
-        if key != searchkey {
-            return err_bad_req();
-        }
-
-        let val = &qs[searchkey.len()..];
-        lastkey = Some(val.as_bytes().to_vec());
-    }
-
-    // lock runtime-live state data
-    let state = m_state.lock().unwrap();
-
-    // lookup database index by name (path elem 0)
-    let idx: usize;
-    match state.name_idx.get(&path.0) {
-        None => return err_not_found(),
-        Some(r_idx) => idx = *r_idx,
-    }
-
-    // attempt to list keys, starting at supplied key (or at db-start, if none)
-    let res;
-    if lastkey.is_none() {
-        res = state.dbs[idx].db.iter_keys(db::api::IterOptions::new());
-    } else {
-        let mut opts = db::api::IterOptions::new();
-        opts.start(&lastkey.unwrap());
-        res = state.dbs[idx].db.iter_keys(opts);
-    }
-    if res.is_err() {
-        return err_500();
-    }
-    let key_list = res.unwrap();
-
-    // fill for-JSON-output struct with return data
-    let mut out_msg = KeyResponseJson {
-        keys: Vec::new(),
-        list_end: key_list.list_end,
-    };
-    for key in key_list.keys {
-        out_msg.keys.push(String::from_utf8_lossy(&key).to_string());
-    }
-
-    // serialize structs into json
-    let jv = serde_json::to_value(&out_msg).unwrap();
-
-    // return json output
-    ok_json(jv)
 }
 
 /// DELETE data item. key in HTTP payload.  return ok as json response
@@ -509,68 +448,21 @@ async fn req_del(
     }
 }
 
-/// DELETE data item.  key in URI path.  return ok as json response
-async fn req_obj_delete(
-    m_state: web::Data<Arc<Mutex<ServerState>>>,
-    path: web::Path<(String, String)>,
-) -> HttpResponse {
-    // lock runtime-live state data
-    let mut state = m_state.lock().unwrap();
-
-    // lookup database index by name (path elem 0)
-    let idx: usize;
-    match state.name_idx.get(&path.0) {
-        None => return err_not_found(),
-        Some(r_idx) => idx = *r_idx,
-    }
-
-    // attempt to remove record from db, based on key (path elem 1)
-    match state.dbs[idx].db.del(path.1.as_bytes()) {
-        Ok(optval) => match optval {
-            true => ok_json(json!({"result": true})),
-            false => err_not_found(), // db: value not found
-        },
-        Err(_e) => err_500(), // db: error
-    }
-}
-
-/// GET data item. key in URI path, returns value in HTTP payload.
-async fn req_obj_get(
-    m_state: web::Data<Arc<Mutex<ServerState>>>,
-    path: web::Path<(String, String)>,
-) -> HttpResponse {
-    // lock runtime-live state data
-    let state = m_state.lock().unwrap();
-
-    // lookup database index by name (path elem 0)
-    let idx: usize;
-    match state.name_idx.get(&path.0) {
-        None => return err_not_found(),
-        Some(r_idx) => idx = *r_idx,
-    }
-
-    // attempt to read record from db, based on key (path elem 1)
-    match state.dbs[idx].db.get(path.1.as_bytes()) {
-        Ok(optval) => match optval {
-            Some(val) => ok_binary(val.to_vec()),
-            None => err_not_found(), // db: value not found
-        },
-        Err(_e) => err_500(), // db: error
-    }
-}
-
-/// GET data item. key in HTTP payload, returns value in HTTP payload.
-async fn req_get(
+/// Multiple-GET data item. key in HTTP payload, returns value in HTTP payload.
+async fn req_mget(
     m_state: web::Data<Arc<Mutex<ServerState>>>,
     (path, body): (web::Path<(String,)>, web::Bytes),
 ) -> HttpResponse {
     // decode protobuf msg containing key, into KeyRequest struct
-    let res = pbdec_key_req(&body);
+    let res = pbdec_mget_req(&body);
     if res.is_none() {
         return err_bad_req();
     }
     let in_msg = res.unwrap();
 
+    let mut out_msg = GetResponse::new();
+    out_msg.magic = EnumOrUnknown::new(get_response::MagicNum::MAGIC);
+
     // lock runtime-live state data
     let state = m_state.lock().unwrap();
 
@@ -581,23 +473,41 @@ async fn req_get(
         Some(r_idx) => idx = *r_idx,
     }
 
-    // attempt to read record from db, based on key (http payload)
-    match state.dbs[idx].db.get(&in_msg.key) {
-        Ok(optval) => match optval {
-            Some(val) => ok_binary(val.to_vec()),
-            None => err_not_found(), // db: value not found
-        },
-        Err(_e) => err_500(), // db: error
+    let ops = in_msg.ops.to_vec();
+    for op in &ops {
+        // attempt to read record from db, based on key (http payload)
+        match state.dbs[idx].db.get(&op.key) {
+            Ok(optval) => match optval {
+                Some(val) => {
+                    let mut out_res = GetOpResult::new();
+                    if !op.skip_val {
+                        out_res.val = val;
+                    }
+                    out_res.is_ok = true;
+                    out_res.err = EnumOrUnknown::new(get_op_result::GetErr::NONE);
+                    out_msg.res.push(out_res);
+                }
+                None => {
+                    let mut out_res = GetOpResult::new();
+                    out_res.is_ok = false;
+                    out_res.err = EnumOrUnknown::new(get_op_result::GetErr::KEY_NOT_FOUND);
+                    out_msg.res.push(out_res);
+                }
+            },
+            Err(_e) => return err_500(), // db: error
+        }
     }
+
+    ok_binary(out_msg.write_to_bytes().unwrap())
 }
 
 /// atomic PUT of multiple data items. data items in HTTP payload. ret json ok.
-async fn req_batch(
+async fn req_mutate(
     m_state: web::Data<Arc<Mutex<ServerState>>>,
     (path, body): (web::Path<(String,)>, web::Bytes),
 ) -> HttpResponse {
     // decode protobuf msg containing key/value pairs
-    let res = pbdec_batch_req(&body);
+    let res = pbdec_mutate_req(&body);
     if res.is_none() {
         return err_bad_req();
     }
@@ -629,28 +539,6 @@ async fn req_batch(
 
     // attempt to store record in db, based on key (path elem 1)
     match state.dbs[idx].db.apply_batch(&batch) {
-        Ok(_optval) => ok_json(json!({"result": true})),
-        Err(_e) => err_500(), // db: error
-    }
-}
-
-/// PUT data item. key in URI path, value in HTTP payload.
-async fn req_obj_put(
-    m_state: web::Data<Arc<Mutex<ServerState>>>,
-    (path, body): (web::Path<(String, String)>, web::Bytes),
-) -> HttpResponse {
-    // lock runtime-live state data
-    let mut state = m_state.lock().unwrap();
-
-    // lookup database index by name (path elem 0)
-    let idx: usize;
-    match state.name_idx.get(&path.0) {
-        None => return err_not_found(),
-        Some(r_idx) => idx = *r_idx,
-    }
-
-    // attempt to store record in db, based on key (path elem 1)
-    match state.dbs[idx].db.put(path.1.as_bytes(), &body.to_vec()) {
         Ok(_optval) => ok_json(json!({"result": true})),
         Err(_e) => err_500(), // db: error
     }
@@ -824,18 +712,11 @@ async fn main() -> std::io::Result<()> {
             .wrap(middleware::Logger::default())
             // register our routes
             .service(req_index)
-            .service(web::resource("/api/{db}/batch").route(web::post().to(req_batch)))
+            .service(web::resource("/api/{db}/mutate").route(web::post().to(req_mutate)))
             .service(web::resource("/api/{db}/clear").route(web::post().to(req_clear)))
             .service(web::resource("/api/{db}/del").route(web::post().to(req_del)))
-            .service(web::resource("/api/{db}/get").route(web::post().to(req_get)))
-            .service(web::resource("/api/{db}/keys.json").route(web::get().to(req_keys_json)))
-            .service(web::resource("/api/{db}/keys").route(web::post().to(req_keys)))
-            .service(
-                web::resource("/api/{db}/obj/{key}")
-                    .route(web::get().to(req_obj_get))
-                    .route(web::put().to(req_obj_put))
-                    .route(web::delete().to(req_obj_delete)),
-            )
+            .service(web::resource("/api/{db}/mget").route(web::post().to(req_mget)))
+            .service(web::resource("/api/{db}/iter").route(web::post().to(req_iter)))
             .service(web::resource("/api/{db}/put").route(web::post().to(req_put)))
             .service(web::resource("/api/{db}/stat").route(web::get().to(req_stat)))
             .service(web::resource("/api/{db}/stat.json").route(web::get().to(req_stat_json)))
