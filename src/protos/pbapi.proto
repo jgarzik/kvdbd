@@ -5,9 +5,11 @@ package kvdbd;
 service KeyValueDb {
   rpc Clear(BasicRequest) returns (BasicResponse);
   rpc DbStat(BasicRequest) returns (DbStatResponse);
+  rpc Del(KeyRequest) returns (BasicResponse);
   rpc Get(GetRequest) returns (GetResponse);
-  rpc Mutate(MutationRequest) returns (BasicResponse);
   rpc Iter(IterRequest) returns (IterResponse);
+  rpc Mutate(MutationRequest) returns (BasicResponse);
+  rpc Put(UpdateRequest) returns (BasicResponse);
 }
 
 message BasicRequest {
