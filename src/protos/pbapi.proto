@@ -3,9 +3,11 @@ syntax = "proto3";
 package kvdbd;
 
 service KeyValueDb {
+  rpc Clear(BasicRequest) returns (BasicResponse);
   rpc DbStat(BasicRequest) returns (DbStatResponse);
-  rpc Mutate(MutationRequest) returns (BasicResponse);
   rpc Get(GetRequest) returns (GetResponse);
+  rpc Mutate(MutationRequest) returns (BasicResponse);
+  rpc Iter(IterRequest) returns (IterResponse);
 }
 
 message BasicRequest {
@@ -60,7 +62,7 @@ message IterRequest {
   bytes prefix = 3;	// limit results to records with keys matching prefix
 }
 
-message KeyResponse {
+message IterResponse {
   enum MagicNum {
     INVALID = 0;
     MAGIC = 44556677;

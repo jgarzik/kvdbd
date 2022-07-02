@@ -132,14 +132,14 @@ Returns binary, protobuf-encoded data structure `GetResponse`,
 containing multiple results, in the order and number found in the
 `GetRequest` sent.
 
-### API: KEYS - sequential list of keys in database
+### API: ITER - sequential list of keys in database
 
-Meta-request: POST http://$HOSTNAME:$PORT/api/$DB/keys
+Meta-request: POST http://$HOSTNAME:$PORT/api/$DB/iter
 
 Encode the last-key-from-previous-query, if any, into protobuf-encoded
-data structure `KeyRequest`, and POST the data to /api/$DB/keys path:
+data structure `KeyRequest`, and POST the data to /api/$DB/iter path:
 ```
-curl -X POST --data-binary @postdata http://localhost:8080/api/db/keys
+curl -X POST --data-binary @postdata http://localhost:8080/api/db/iter
 ```
 
 Returns binary data (application/octet-stream) encoding the protobuf

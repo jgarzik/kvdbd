@@ -21,8 +21,8 @@ use protobuf::{EnumOrUnknown, Message};
 include!(concat!(env!("OUT_DIR"), "/protos/mod.rs"));
 use pbapi::{
     get_op_result, get_request, get_response, iter_request, key_request, mutation_request,
-    update_request, DbStatResponse, GetOp, GetRequest, GetResponse, IterRequest, KeyRequest,
-    KeyResponse, MutationRequest, UpdateRequest,
+    update_request, DbStatResponse, GetOp, GetRequest, GetResponse, IterRequest, IterResponse,
+    KeyRequest, MutationRequest, UpdateRequest,
 };
 
 struct KvdbClient {
@@ -241,13 +241,13 @@ fn pbenc_update_req(key: &[u8], val: &[u8]) -> Vec<u8> {
 
 async fn t_iter(client: &Client, db_id: String, start_key: Option<Vec<u8>>) -> KeyList {
     let basepath = format!("{}{}/{}/", T_ENDPOINT, T_BASEURI, db_id);
-    let keys_url = format!("{}keys", basepath);
+    let iter_url = format!("{}iter", basepath);
 
     // encode keys request
     let out_bytes = pbenc_iter_req(start_key, None);
 
     // exec keys request; check for successful response
-    let resp_res = client.post(&keys_url).body(out_bytes).send().await;
+    let resp_res = client.post(&iter_url).body(out_bytes).send().await;
     if resp_res.is_err() {
         assert!(false);
     }
@@ -266,7 +266,7 @@ async fn t_iter(client: &Client, db_id: String, start_key: Option<Vec<u8>>) -> K
     }
 
     let in_msg;
-    match KeyResponse::parse_from_bytes(&bytes) {
+    match IterResponse::parse_from_bytes(&bytes) {
         Err(_e) => {
             assert!(false);
             panic!("silence E0381 warning");

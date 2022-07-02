@@ -25,9 +25,9 @@ use protobuf::{EnumOrUnknown, Message};
 include!(concat!(env!("OUT_DIR"), "/protos/mod.rs"));
 
 use pbapi::{
-    db_stat_response, get_op_result, get_request, get_response, iter_request, key_request,
-    key_response, mutation_request, update_request, DbStatResponse, GetOpResult, GetRequest,
-    GetResponse, IterRequest, KeyRequest, KeyResponse, MutationRequest, UpdateRequest,
+    db_stat_response, get_op_result, get_request, get_response, iter_request, iter_response,
+    key_request, mutation_request, update_request, DbStatResponse, GetOpResult, GetRequest,
+    GetResponse, IterRequest, IterResponse, KeyRequest, MutationRequest, UpdateRequest,
 };
 
 // struct used for both input (server config file) and output (server info)
@@ -74,13 +74,6 @@ struct ServerInfo {
 #[derive(Serialize, Deserialize)]
 struct DbStatResponseJson {
     n_records: String, // some JSON impl have trouble with big ints
-}
-
-// JSON response to KEYS API request
-#[derive(Serialize, Deserialize)]
-struct KeyResponseJson {
-    keys: Vec<String>,
-    list_end: bool,
 }
 
 // per-db runtime state info
@@ -181,9 +174,9 @@ fn pbenc_db_stat_resp(n_records: u64) -> Vec<u8> {
     return out_msg.write_to_bytes().unwrap();
 }
 
-fn pbenc_keys_resp(key_list: &db::api::KeyList) -> Vec<u8> {
-    let mut out_msg = KeyResponse::new();
-    out_msg.magic = EnumOrUnknown::new(key_response::MagicNum::MAGIC);
+fn pbenc_iter_resp(key_list: &db::api::KeyList) -> Vec<u8> {
+    let mut out_msg = IterResponse::new();
+    out_msg.magic = EnumOrUnknown::new(iter_response::MagicNum::MAGIC);
 
     for key in &key_list.keys {
         out_msg.keys.push(key.clone());
@@ -382,7 +375,7 @@ async fn req_stat_json(
 }
 
 /// Sequential iteration through all KEYS in db. Start-key in HTTP payload.
-async fn req_keys(
+async fn req_iter(
     m_state: web::Data<Arc<Mutex<ServerState>>>,
     (path, body): (web::Path<(String,)>, web::Bytes),
 ) -> HttpResponse {
@@ -418,7 +411,7 @@ async fn req_keys(
 
     // encode protobuf output to bytes
     let key_list = res.unwrap();
-    let out_bytes = pbenc_keys_resp(&key_list);
+    let out_bytes = pbenc_iter_resp(&key_list);
 
     ok_binary(out_bytes)
 }
@@ -723,7 +716,7 @@ async fn main() -> std::io::Result<()> {
             .service(web::resource("/api/{db}/clear").route(web::post().to(req_clear)))
             .service(web::resource("/api/{db}/del").route(web::post().to(req_del)))
             .service(web::resource("/api/{db}/mget").route(web::post().to(req_mget)))
-            .service(web::resource("/api/{db}/keys").route(web::post().to(req_keys)))
+            .service(web::resource("/api/{db}/iter").route(web::post().to(req_iter)))
             .service(web::resource("/api/{db}/put").route(web::post().to(req_put)))
             .service(web::resource("/api/{db}/stat").route(web::get().to(req_stat)))
             .service(web::resource("/api/{db}/stat.json").route(web::get().to(req_stat_json)))
