@@ -15,7 +15,7 @@ use std::sync::{Arc, Mutex};
 use std::{env, fs, process};
 
 use actix_web::http::StatusCode;
-use actix_web::{middleware, web, App, HttpRequest, HttpResponse, HttpServer};
+use actix_web::{middleware, web, App, HttpResponse, HttpServer};
 use openssl::ssl::{SslAcceptor, SslFiletype, SslMethod};
 use serde_derive::{Deserialize, Serialize};
 use serde_json::json;
@@ -423,74 +423,6 @@ async fn req_keys(
     ok_binary(out_bytes)
 }
 
-/// Sequential iteration through all KEYS in db. Start-key in HTTP payload.
-async fn req_keys_json(
-    m_state: web::Data<Arc<Mutex<ServerState>>>,
-    req: HttpRequest,
-    path: web::Path<(String,)>,
-) -> HttpResponse {
-    let mut lastkey: Option<Vec<u8>> = None;
-
-    // query string continues previous search
-    let qs = req.query_string();
-    if qs.find("&") != None {
-        // we only support a single key=value param
-        return err_bad_req();
-    }
-    let searchkey = "lastkey=";
-    if qs.len() > 0 {
-        if qs.len() < searchkey.len() {
-            return err_bad_req();
-        }
-        let key = &qs[0..searchkey.len()];
-        if key != searchkey {
-            return err_bad_req();
-        }
-
-        let val = &qs[searchkey.len()..];
-        lastkey = Some(val.as_bytes().to_vec());
-    }
-
-    // lock runtime-live state data
-    let state = m_state.lock().unwrap();
-
-    // lookup database index by name (path elem 0)
-    let idx: usize;
-    match state.name_idx.get(&path.0) {
-        None => return err_not_found(),
-        Some(r_idx) => idx = *r_idx,
-    }
-
-    // attempt to list keys, starting at supplied key (or at db-start, if none)
-    let res;
-    if lastkey.is_none() {
-        res = state.dbs[idx].db.iter_keys(db::api::IterOptions::new());
-    } else {
-        let mut opts = db::api::IterOptions::new();
-        opts.start(&lastkey.unwrap());
-        res = state.dbs[idx].db.iter_keys(opts);
-    }
-    if res.is_err() {
-        return err_500();
-    }
-    let key_list = res.unwrap();
-
-    // fill for-JSON-output struct with return data
-    let mut out_msg = KeyResponseJson {
-        keys: Vec::new(),
-        list_end: key_list.list_end,
-    };
-    for key in key_list.keys {
-        out_msg.keys.push(String::from_utf8_lossy(&key).to_string());
-    }
-
-    // serialize structs into json
-    let jv = serde_json::to_value(&out_msg).unwrap();
-
-    // return json output
-    ok_json(jv)
-}
-
 /// DELETE data item. key in HTTP payload.  return ok as json response
 async fn req_del(
     m_state: web::Data<Arc<Mutex<ServerState>>>,
@@ -791,7 +723,6 @@ async fn main() -> std::io::Result<()> {
             .service(web::resource("/api/{db}/clear").route(web::post().to(req_clear)))
             .service(web::resource("/api/{db}/del").route(web::post().to(req_del)))
             .service(web::resource("/api/{db}/mget").route(web::post().to(req_mget)))
-            .service(web::resource("/api/{db}/keys.json").route(web::get().to(req_keys_json)))
             .service(web::resource("/api/{db}/keys").route(web::post().to(req_keys)))
             .service(web::resource("/api/{db}/put").route(web::post().to(req_put)))
             .service(web::resource("/api/{db}/stat").route(web::get().to(req_stat)))

@@ -8,16 +8,11 @@ Connect to HTTP endpoint using any web client.
 * [HTTP REST API - overview](#http-rest-api---overview)
 * [REST/JSON API](#restjson-api)
    * [API: Service identity and status](#api-service-identity-and-status)
-   * [API: CLEAR - delete all records](#api-clear---delete-all-records)
-   * [API: DELETE - remove record, based on key](#api-delete---remove-record-based-on-key)
-   * [API: GET - lookup value by key](#api-get---lookup-value-by-key)
-   * [API: KEYS.json - sequential JSON list of keys in database](#api-keysjson---sequential-json-list-of-keys-in-database)
-   * [API: PUT - store key and value](#api-put---store-key-and-value)
    * [API: STAT.json - database statistics](#api-statjson---database-statistics)
 * [REST/Protobufs API](#restprotobufs-api)
+   * [API: CLEAR - delete all records](#api-clear---delete-all-records)
    * [API: MUTATE - atomic update of many records](#api-batch-update---atomic-update-of-many-records)
    * [API: DELETE - remove record, based on binary key](#api-delete---remove-record-based-on-binary-key)
-   * [API: GET (lookup value by binary key)](#api-get-lookup-value-by-binary-key)
    * [API: KEYS - sequential list of keys in database](#api-keys---sequential-list-of-keys-in-database)
    * [API: PUT - store binary key and value](#api-put---store-binary-key-and-value)
    * [API: STAT - database statistics](#api-stat---database-statistics)
@@ -65,33 +60,6 @@ Returns JSON describing service:
 }
 ```
 
-### API: CLEAR - delete all records
-
-Meta-request: POST http://$HOSTNAME:$PORT/api/$DB/clear
-
-POST the Clear request to /api/$DB/clear path:
-```
-curl -X POST http://localhost:8080/api/db/clear
-```
-
-Returns JSON indicating success:
-```
-{"result":true}
-```
-
-### API: KEYS.json - sequential JSON list of keys in database
-
-Meta-request: GET http://$HOSTNAME:$PORT/api/$DB/keys.json[?lastkey=$LAST_KEY]
-
-Encode the last-key-from-previous-query, if any, into HTTP query string,
-GET the data from /api/$DB/keys.json path:
-```
-curl -s http://localhost:8080/api/db1/keys.json?lastkey=age
-```
-
-Returns JSON object containing a list of keys, and a continuation indicator,
-if the list was truncated.  Maximum number of items returned per query: 1,000.
-
 ### API: STAT.json - database statistics
 
 Meta-request: GET http://$HOSTNAME:$PORT/api/$DB/stat.json
@@ -105,6 +73,20 @@ curl -s http://localhost:8080/api/db1/stat.json
 Returns JSON object containing a record count, and other db metadata.
 
 ## REST/Protobufs API
+
+### API: CLEAR - delete all records
+
+Meta-request: POST http://$HOSTNAME:$PORT/api/$DB/clear
+
+POST the Clear request to /api/$DB/clear path:
+```
+curl -X POST http://localhost:8080/api/db/clear
+```
+
+Returns JSON indicating success:
+```
+{"result":true}
+```
 
 ### API: MUTATE - atomic update of many records
 
@@ -149,22 +131,6 @@ curl -X POST --data-binary @postdata http://localhost:8080/api/db/mget
 Returns binary, protobuf-encoded data structure `GetResponse`,
 containing multiple results, in the order and number found in the
 `GetRequest` sent.
-
-### API: GET (lookup value by binary key)
-
-Meta-request: POST http://$HOSTNAME:$PORT/api/$DB/get
-
-Encode the key into protobuf-encoded
-data structure `KeyRequest`, and POST the data to /api/$DB/get path:
-```
-curl -X POST --data-binary @postdata http://localhost:8080/api/db/get
-```
-
-Returns binary data (application/octet-stream) describing value found,
-if present:
-```
-25
-```
 
 ### API: KEYS - sequential list of keys in database
 
