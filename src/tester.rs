@@ -25,6 +25,111 @@ use pbapi::{
     KeyResponse, MutationRequest, UpdateRequest,
 };
 
+struct KvdbClient {
+    client: reqwest::Client,
+}
+
+impl KvdbClient {
+    pub fn new() -> KvdbClient {
+        KvdbClient {
+            client: reqwest::Client::builder()
+                .danger_accept_invalid_certs(true)
+                .build()
+                .unwrap(),
+        }
+    }
+
+    pub async fn get1(&mut self, db_id: String, key: String) -> Option<Vec<u8>> {
+        let basepath = format!("{}{}/{}/", T_ENDPOINT, T_BASEURI, db_id);
+        let get_url = format!("{}mget", basepath);
+
+        // encode get request
+        let out_bytes = pbenc_get1_req(key.as_bytes(), false);
+
+        // exec get request; key1 should exist and match value, following batch
+        let resp_res = self
+            .client
+            .post(&get_url)
+            .body(out_bytes.clone())
+            .send()
+            .await;
+        match resp_res {
+            Ok(resp) => {
+                if resp.status() != StatusCode::OK {
+                    return None;
+                }
+
+                match resp.bytes().await {
+                    Ok(bytes) => match GetResponse::parse_from_bytes(&bytes) {
+                        Err(_e) => None,
+                        Ok(in_resp) => {
+                            if in_resp.magic != EnumOrUnknown::new(get_response::MagicNum::MAGIC)
+                                || in_resp.res.len() != 1
+                                || !in_resp.res[0].is_ok
+                            {
+                                None
+                            } else {
+                                Some(in_resp.res[0].val.clone())
+                            }
+                        }
+                    },
+                    Err(_e) => None,
+                }
+            }
+            Err(_e) => None,
+        }
+    }
+
+    pub async fn put1(&mut self, db_id: String, key: String, value: String) -> bool {
+        let basepath = format!("{}{}/{}/", T_ENDPOINT, T_BASEURI, db_id);
+        let mutate_url = format!("{}mutate", basepath);
+
+        // encode put request
+        let out_req = pbenc_mutate_ins1(key.as_bytes(), value.as_bytes());
+        let out_bytes = out_req.write_to_bytes().unwrap();
+
+        // exec put request
+        let resp_res = self.client.post(&mutate_url).body(out_bytes).send().await;
+        match resp_res {
+            Ok(resp) => {
+                if resp.status() == StatusCode::OK {
+                    match resp.text().await {
+                        Ok(_body) => true,
+                        Err(_e) => false,
+                    }
+                } else {
+                    false
+                }
+            }
+            Err(_e) => false,
+        }
+    }
+
+    pub async fn del1(&mut self, db_id: String, key: String) -> bool {
+        let basepath = format!("{}{}/{}/", T_ENDPOINT, T_BASEURI, db_id);
+        let del_url = format!("{}del", basepath);
+
+        // encode del request
+        let out_bytes = pbenc_key_req(key.as_bytes());
+
+        // exec del request
+        let resp_res = self.client.post(&del_url).body(out_bytes).send().await;
+        match resp_res {
+            Ok(resp) => {
+                if resp.status() == StatusCode::OK {
+                    match resp.text().await {
+                        Ok(_body) => true,
+                        Err(_e) => false,
+                    }
+                } else {
+                    false
+                }
+            }
+            Err(_e) => false,
+        }
+    }
+}
+
 struct KeyList {
     keys: Vec<Vec<u8>>,
     list_end: bool,
@@ -61,6 +166,21 @@ fn pbenc_key_req(key: &[u8]) -> Vec<u8> {
     out_msg.magic = EnumOrUnknown::new(key_request::MagicNum::MAGIC);
     out_msg.key = key.to_vec();
     return out_msg.write_to_bytes().unwrap();
+}
+
+fn pbenc_mutate_ins1(key: &[u8], val: &[u8]) -> MutationRequest {
+    let mut out_msg = MutationRequest::new();
+    out_msg.magic = EnumOrUnknown::new(mutation_request::MagicNum::MAGIC);
+
+    let mut out_upd = UpdateRequest::new();
+    out_upd.magic = EnumOrUnknown::new(update_request::MagicNum::MAGIC);
+    out_upd.key = key.to_vec();
+    out_upd.value = val.to_vec();
+    out_upd.is_insert = true;
+
+    out_msg.reqs.push(out_upd);
+
+    out_msg
 }
 
 fn pbenc_update_ins(key: &[u8], val: &[u8]) -> UpdateRequest {
@@ -448,15 +568,28 @@ async fn op_iter(client: &Client, db_id: String) {
     }
 }
 
-async fn op_get(client: &Client, db_id: String) {
+async fn op_get(kvdb_client: &mut KvdbClient, db_id: String) {
     let test_key = String::from("op_key1");
     let test_value = format!("helloworld op_get {}", db_id);
 
-    t_get_gone(client, db_id.clone(), test_key.clone()).await;
-    t_put(client, db_id.clone(), test_key.clone(), test_value.clone()).await;
-    t_get_ok(client, db_id.clone(), test_key.clone(), test_value).await;
-    t_del(client, db_id.clone(), test_key.clone()).await;
-    t_get_gone(client, db_id, test_key).await;
+    let res = kvdb_client.get1(db_id.clone(), test_key.clone()).await;
+    assert_eq!(res, None);
+
+    let res = kvdb_client
+        .put1(db_id.clone(), test_key.clone(), test_value.clone())
+        .await;
+    assert_eq!(res, true);
+
+    let res = kvdb_client.get1(db_id.clone(), test_key.clone()).await;
+    assert_ne!(res, None);
+    let res_value = res.unwrap();
+    assert_eq!(test_value.as_bytes(), res_value);
+
+    let res = kvdb_client.del1(db_id.clone(), test_key.clone()).await;
+    assert_eq!(res, true);
+
+    let res = kvdb_client.get1(db_id.clone(), test_key.clone()).await;
+    assert_eq!(res, None);
 }
 
 async fn op_clear(client: &Client, db_id: String) {
@@ -604,6 +737,7 @@ async fn main() -> Result<(), reqwest::Error> {
         .danger_accept_invalid_certs(true)
         .build()
         .unwrap();
+    let mut kvdb_client = KvdbClient::new();
 
     // test, for each database
     for n in 1..3 {
@@ -611,7 +745,7 @@ async fn main() -> Result<(), reqwest::Error> {
 
         op_batch(&client, db_id.clone()).await;
         op_del(&client, db_id.clone()).await;
-        op_get(&client, db_id.clone()).await;
+        op_get(&mut kvdb_client, db_id.clone()).await;
         op_obj(&client, db_id.clone()).await;
         op_put(&client, db_id.clone()).await;
         op_clear(&client, db_id.clone()).await;
