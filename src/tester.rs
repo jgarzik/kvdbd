@@ -44,12 +44,13 @@ fn pbenc_iter_req(start_key: Option<Vec<u8>>, prefix: Option<Vec<u8>>) -> Vec<u8
     return out_msg.write_to_bytes().unwrap();
 }
 
-fn pbenc_get1_req(key: &[u8]) -> Vec<u8> {
+fn pbenc_get1_req(key: &[u8], skip_val: bool) -> Vec<u8> {
     let mut out_msg = GetRequest::new();
     out_msg.magic = EnumOrUnknown::new(get_request::MagicNum::MAGIC);
 
     let mut out_op = GetOp::new();
     out_op.key = key.to_vec();
+    out_op.skip_val = skip_val;
     out_msg.ops.push(out_op);
 
     return out_msg.write_to_bytes().unwrap();
@@ -140,7 +141,7 @@ async fn t_get_gone(client: &Client, db_id: String, key: String) {
     let get_url = format!("{}mget", basepath);
 
     // encode get request
-    let out_bytes = pbenc_get1_req(key.as_bytes());
+    let out_bytes = pbenc_get1_req(key.as_bytes(), true);
 
     // exec get request; key1 should not exist, following batch
     let resp_res = client.post(&get_url).body(out_bytes.clone()).send().await;
@@ -177,7 +178,7 @@ async fn t_get_ok(client: &Client, db_id: String, key: String, value: String) {
     let get_url = format!("{}mget", basepath);
 
     // encode get request
-    let out_bytes = pbenc_get1_req(key.as_bytes());
+    let out_bytes = pbenc_get1_req(key.as_bytes(), false);
 
     // exec get request; key1 should exist and match value, following batch
     let resp_res = client.post(&get_url).body(out_bytes.clone()).send().await;
