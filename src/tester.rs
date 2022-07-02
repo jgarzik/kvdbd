@@ -482,8 +482,6 @@ async fn op_clear(client: &Client, db_id: String) {
 async fn op_put(client: &Client, db_id: String) {
     let basepath = format!("{}{}/{}/", T_ENDPOINT, T_BASEURI, db_id);
     let put_url = format!("{}put", basepath);
-    let get_url = format!("{}get", basepath);
-    let del_url = format!("{}del", basepath);
     let test_key = String::from("op_put_key");
     let test_value = format!("helloworld op_put {}", db_id);
 
@@ -505,30 +503,8 @@ async fn op_put(client: &Client, db_id: String) {
     }
 
     // encode verification get request
-    let out_bytes = pbenc_key_req(test_key.as_bytes());
-
-    // exec get request
-    let resp_res = client.post(&get_url).body(out_bytes.clone()).send().await;
-    match resp_res {
-        Ok(resp) => {
-            assert_eq!(resp.status(), StatusCode::OK);
-
-            match resp.text().await {
-                Ok(body) => assert_eq!(body, test_value),
-                Err(_e) => assert!(false),
-            }
-        }
-        Err(_e) => assert!(false),
-    }
-
-    // re-use same KeyRequest bytes for our delete request
-
-    // exec del request
-    let resp_res = client.post(&del_url).body(out_bytes).send().await;
-    match resp_res {
-        Ok(resp) => assert_eq!(resp.status(), StatusCode::OK),
-        Err(_e) => assert!(false),
-    }
+    t_get_ok(&client, db_id.clone(), test_key.clone(), test_value).await;
+    t_del(&client, db_id.clone(), test_key).await;
 }
 
 async fn op_obj(client: &Client, db_id: String) {
