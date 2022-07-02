@@ -95,6 +95,7 @@ message MutationRequest {
 
 message GetOp {
   bytes key = 1;	// record key
+  bool skip_val = 2;	// elide record value.  used for existence checks.
 }
 
 message GetRequest {

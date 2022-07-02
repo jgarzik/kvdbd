@@ -637,7 +637,9 @@ async fn req_mget(
             Ok(optval) => match optval {
                 Some(val) => {
                     let mut out_res = GetOpResult::new();
-                    out_res.val = val;
+                    if !op.skip_val {
+                        out_res.val = val;
+                    }
                     out_res.is_ok = true;
                     out_res.err = EnumOrUnknown::new(get_op_result::GetErr::NONE);
                     out_msg.res.push(out_res);
