@@ -79,38 +79,6 @@ Returns JSON indicating success:
 {"result":true}
 ```
 
-### API: DELETE - remove record, based on key
-
-Meta-request: DELETE http://$HOSTNAME:$PORT/api/$DB/obj/$KEY
-
-Append the key to the URI path following the final '/'.  In the
-following example, "age" is the key associated with the record
-being removed, and "/api/db" is the base URI:
-```
-curl -X DELETE http://localhost:8080/api/db/obj/age
-```
-
-Returns JSON describing value found and removed (if in db):
-```
-{"result":true}
-```
-
-### API: GET - lookup value by key
-
-Meta-request: GET http://$HOSTNAME:$PORT/api/$DB/obj/$KEY
-
-Append the key to the URI path following the final '/'.  In the
-following example, "age" is the key and "/api/db" is the base URI:
-```
-curl http://localhost:8080/api/db/obj/age
-```
-
-Returns binary data (application/octet-stream) describing value found,
-if present:
-```
-25
-```
-
 ### API: KEYS.json - sequential JSON list of keys in database
 
 Meta-request: GET http://$HOSTNAME:$PORT/api/$DB/keys.json[?lastkey=$LAST_KEY]
@@ -123,22 +91,6 @@ curl -s http://localhost:8080/api/db1/keys.json?lastkey=age
 
 Returns JSON object containing a list of keys, and a continuation indicator,
 if the list was truncated.  Maximum number of items returned per query: 1,000.
-
-### API: PUT - store key and value
-
-Meta-request: PUT http://$HOSTNAME:$PORT/api/$DB/obj/$KEY
-
-Append the key to the URI path, and provide HTTP body as value.  In the
-following example, "age" is the key, "25" is the value,
-and "/api/db" is the base URI:
-```
-curl --data-binary 25 -X PUT http://localhost:8080/api/db/obj/age
-```
-
-Returns JSON indicating success:
-```
-{"result":true}
-```
 
 ### API: STAT.json - database statistics
 

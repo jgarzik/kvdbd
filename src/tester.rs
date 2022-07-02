@@ -631,87 +631,6 @@ async fn op_put(client: &Client, db_id: String) {
     t_del(&client, db_id.clone(), test_key).await;
 }
 
-async fn op_obj(client: &Client, db_id: String) {
-    let basepath = format!("{}{}/{}/", T_ENDPOINT, T_BASEURI, db_id);
-    let test_key = String::from("1");
-    let test_value = format!("helloworld {}", db_id);
-
-    // Check that a record with key 1 doesn't exist.
-    let url = format!("{}obj/{}", basepath, test_key);
-    let resp_res = client.get(&url).send().await;
-    match resp_res {
-        Ok(resp) => assert_eq!(resp.status(), StatusCode::NOT_FOUND),
-        Err(_e) => assert!(false),
-    }
-
-    // verify DELETE(non exist) returns not-found
-    let resp_res = client.delete(&url).send().await;
-    match resp_res {
-        Ok(resp) => assert_eq!(resp.status(), StatusCode::NOT_FOUND),
-        Err(_e) => assert!(false),
-    }
-
-    // PUT a new record
-    let resp_res = client.put(&url).body(test_value.clone()).send().await;
-    match resp_res {
-        Ok(resp) => assert_eq!(resp.status(), StatusCode::OK),
-        Err(_e) => assert!(false),
-    }
-
-    // Check that the record exists with the correct contents.
-    let resp_res = client.get(&url).send().await;
-    match resp_res {
-        Ok(resp) => {
-            assert_eq!(resp.status(), StatusCode::OK);
-
-            match resp.text().await {
-                Ok(body) => assert_eq!(body, test_value),
-                Err(_e) => assert!(false),
-            }
-        }
-        Err(_e) => assert!(false),
-    }
-
-    // Check that the record exists with the correct contents,
-    // protobuf-style.
-    let out_bytes = pbenc_key_req(test_key.as_bytes());
-
-    let get_pb_url = format!("{}get", basepath);
-    let resp_res = client.post(&get_pb_url).body(out_bytes).send().await;
-    match resp_res {
-        Ok(resp) => {
-            assert_eq!(resp.status(), StatusCode::OK);
-
-            match resp.text().await {
-                Ok(body) => assert_eq!(body, test_value),
-                Err(_e) => assert!(false),
-            }
-        }
-        Err(_e) => assert!(false),
-    }
-
-    // DELETE record
-    let resp_res = client.delete(&url).send().await;
-    match resp_res {
-        Ok(resp) => assert_eq!(resp.status(), StatusCode::OK),
-        Err(_e) => assert!(false),
-    }
-
-    // Check (again) that a record with key 1 doesn't exist.
-    let resp_res = client.get(&url).send().await;
-    match resp_res {
-        Ok(resp) => assert_eq!(resp.status(), StatusCode::NOT_FOUND),
-        Err(_e) => assert!(false),
-    }
-
-    // verify (again) DELETE(non exist) returns not-found
-    let resp_res = client.delete(&url).send().await;
-    match resp_res {
-        Ok(resp) => assert_eq!(resp.status(), StatusCode::NOT_FOUND),
-        Err(_e) => assert!(false),
-    }
-}
-
 #[tokio::main]
 async fn main() -> Result<(), reqwest::Error> {
     // CLI parser static setup
@@ -738,7 +657,6 @@ async fn main() -> Result<(), reqwest::Error> {
         op_batch(&mut kvdb_client, &client, db_id.clone()).await;
         op_del(&client, db_id.clone()).await;
         op_get(&mut kvdb_client).await;
-        op_obj(&client, db_id.clone()).await;
         op_put(&client, db_id.clone()).await;
         op_clear(&client, db_id.clone()).await;
         op_stat(&mut kvdb_client).await;

@@ -523,88 +523,6 @@ async fn req_del(
     }
 }
 
-/// DELETE data item.  key in URI path.  return ok as json response
-async fn req_obj_delete(
-    m_state: web::Data<Arc<Mutex<ServerState>>>,
-    path: web::Path<(String, String)>,
-) -> HttpResponse {
-    // lock runtime-live state data
-    let mut state = m_state.lock().unwrap();
-
-    // lookup database index by name (path elem 0)
-    let idx: usize;
-    match state.name_idx.get(&path.0) {
-        None => return err_not_found(),
-        Some(r_idx) => idx = *r_idx,
-    }
-
-    // attempt to remove record from db, based on key (path elem 1)
-    match state.dbs[idx].db.del(path.1.as_bytes()) {
-        Ok(optval) => match optval {
-            true => ok_json(json!({"result": true})),
-            false => err_not_found(), // db: value not found
-        },
-        Err(_e) => err_500(), // db: error
-    }
-}
-
-/// GET data item. key in URI path, returns value in HTTP payload.
-async fn req_obj_get(
-    m_state: web::Data<Arc<Mutex<ServerState>>>,
-    path: web::Path<(String, String)>,
-) -> HttpResponse {
-    // lock runtime-live state data
-    let state = m_state.lock().unwrap();
-
-    // lookup database index by name (path elem 0)
-    let idx: usize;
-    match state.name_idx.get(&path.0) {
-        None => return err_not_found(),
-        Some(r_idx) => idx = *r_idx,
-    }
-
-    // attempt to read record from db, based on key (path elem 1)
-    match state.dbs[idx].db.get(path.1.as_bytes()) {
-        Ok(optval) => match optval {
-            Some(val) => ok_binary(val.to_vec()),
-            None => err_not_found(), // db: value not found
-        },
-        Err(_e) => err_500(), // db: error
-    }
-}
-
-/// GET data item. key in HTTP payload, returns value in HTTP payload.
-async fn req_get(
-    m_state: web::Data<Arc<Mutex<ServerState>>>,
-    (path, body): (web::Path<(String,)>, web::Bytes),
-) -> HttpResponse {
-    // decode protobuf msg containing key, into KeyRequest struct
-    let res = pbdec_key_req(&body);
-    if res.is_none() {
-        return err_bad_req();
-    }
-    let in_msg = res.unwrap();
-
-    // lock runtime-live state data
-    let state = m_state.lock().unwrap();
-
-    // lookup database index by name (path elem 0)
-    let idx: usize;
-    match state.name_idx.get(&path.0) {
-        None => return err_not_found(),
-        Some(r_idx) => idx = *r_idx,
-    }
-
-    // attempt to read record from db, based on key (http payload)
-    match state.dbs[idx].db.get(&in_msg.key) {
-        Ok(optval) => match optval {
-            Some(val) => ok_binary(val.to_vec()),
-            None => err_not_found(), // db: value not found
-        },
-        Err(_e) => err_500(), // db: error
-    }
-}
-
 /// Multiple-GET data item. key in HTTP payload, returns value in HTTP payload.
 async fn req_mget(
     m_state: web::Data<Arc<Mutex<ServerState>>>,
@@ -696,28 +614,6 @@ async fn req_mutate(
 
     // attempt to store record in db, based on key (path elem 1)
     match state.dbs[idx].db.apply_batch(&batch) {
-        Ok(_optval) => ok_json(json!({"result": true})),
-        Err(_e) => err_500(), // db: error
-    }
-}
-
-/// PUT data item. key in URI path, value in HTTP payload.
-async fn req_obj_put(
-    m_state: web::Data<Arc<Mutex<ServerState>>>,
-    (path, body): (web::Path<(String, String)>, web::Bytes),
-) -> HttpResponse {
-    // lock runtime-live state data
-    let mut state = m_state.lock().unwrap();
-
-    // lookup database index by name (path elem 0)
-    let idx: usize;
-    match state.name_idx.get(&path.0) {
-        None => return err_not_found(),
-        Some(r_idx) => idx = *r_idx,
-    }
-
-    // attempt to store record in db, based on key (path elem 1)
-    match state.dbs[idx].db.put(path.1.as_bytes(), &body.to_vec()) {
         Ok(_optval) => ok_json(json!({"result": true})),
         Err(_e) => err_500(), // db: error
     }
@@ -894,16 +790,9 @@ async fn main() -> std::io::Result<()> {
             .service(web::resource("/api/{db}/mutate").route(web::post().to(req_mutate)))
             .service(web::resource("/api/{db}/clear").route(web::post().to(req_clear)))
             .service(web::resource("/api/{db}/del").route(web::post().to(req_del)))
-            .service(web::resource("/api/{db}/get").route(web::post().to(req_get)))
             .service(web::resource("/api/{db}/mget").route(web::post().to(req_mget)))
             .service(web::resource("/api/{db}/keys.json").route(web::get().to(req_keys_json)))
             .service(web::resource("/api/{db}/keys").route(web::post().to(req_keys)))
-            .service(
-                web::resource("/api/{db}/obj/{key}")
-                    .route(web::get().to(req_obj_get))
-                    .route(web::put().to(req_obj_put))
-                    .route(web::delete().to(req_obj_delete)),
-            )
             .service(web::resource("/api/{db}/put").route(web::post().to(req_put)))
             .service(web::resource("/api/{db}/stat").route(web::get().to(req_stat)))
             .service(web::resource("/api/{db}/stat.json").route(web::get().to(req_stat_json)))
