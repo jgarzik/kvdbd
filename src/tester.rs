@@ -27,20 +27,22 @@ use pbapi::{
 
 struct KvdbClient {
     client: reqwest::Client,
+    db_id: String,
 }
 
 impl KvdbClient {
-    pub fn new() -> KvdbClient {
+    pub fn new(db_id_: String) -> KvdbClient {
         KvdbClient {
             client: reqwest::Client::builder()
                 .danger_accept_invalid_certs(true)
                 .build()
                 .unwrap(),
+            db_id: db_id_.clone(),
         }
     }
 
-    pub async fn get1(&mut self, db_id: String, key: String) -> Option<Vec<u8>> {
-        let basepath = format!("{}{}/{}/", T_ENDPOINT, T_BASEURI, db_id);
+    pub async fn get1(&mut self, key: String) -> Option<Vec<u8>> {
+        let basepath = format!("{}{}/{}/", T_ENDPOINT, T_BASEURI, self.db_id);
         let get_url = format!("{}mget", basepath);
 
         // encode get request
@@ -80,8 +82,8 @@ impl KvdbClient {
         }
     }
 
-    pub async fn put1(&mut self, db_id: String, key: String, value: String) -> bool {
-        let basepath = format!("{}{}/{}/", T_ENDPOINT, T_BASEURI, db_id);
+    pub async fn put1(&mut self, key: String, value: String) -> bool {
+        let basepath = format!("{}{}/{}/", T_ENDPOINT, T_BASEURI, self.db_id);
         let mutate_url = format!("{}mutate", basepath);
 
         // encode put request
@@ -105,8 +107,8 @@ impl KvdbClient {
         }
     }
 
-    pub async fn del1(&mut self, db_id: String, key: String) -> bool {
-        let basepath = format!("{}{}/{}/", T_ENDPOINT, T_BASEURI, db_id);
+    pub async fn del1(&mut self, key: String) -> bool {
+        let basepath = format!("{}{}/{}/", T_ENDPOINT, T_BASEURI, self.db_id);
         let del_url = format!("{}del", basepath);
 
         // encode del request
@@ -568,27 +570,25 @@ async fn op_iter(client: &Client, db_id: String) {
     }
 }
 
-async fn op_get(kvdb_client: &mut KvdbClient, db_id: String) {
+async fn op_get(kvdb_client: &mut KvdbClient) {
     let test_key = String::from("op_key1");
-    let test_value = format!("helloworld op_get {}", db_id);
+    let test_value = format!("helloworld op_get {}", kvdb_client.db_id);
 
-    let res = kvdb_client.get1(db_id.clone(), test_key.clone()).await;
+    let res = kvdb_client.get1(test_key.clone()).await;
     assert_eq!(res, None);
 
-    let res = kvdb_client
-        .put1(db_id.clone(), test_key.clone(), test_value.clone())
-        .await;
+    let res = kvdb_client.put1(test_key.clone(), test_value.clone()).await;
     assert_eq!(res, true);
 
-    let res = kvdb_client.get1(db_id.clone(), test_key.clone()).await;
+    let res = kvdb_client.get1(test_key.clone()).await;
     assert_ne!(res, None);
     let res_value = res.unwrap();
     assert_eq!(test_value.as_bytes(), res_value);
 
-    let res = kvdb_client.del1(db_id.clone(), test_key.clone()).await;
+    let res = kvdb_client.del1(test_key.clone()).await;
     assert_eq!(res, true);
 
-    let res = kvdb_client.get1(db_id.clone(), test_key.clone()).await;
+    let res = kvdb_client.get1(test_key.clone()).await;
     assert_eq!(res, None);
 }
 
@@ -737,15 +737,16 @@ async fn main() -> Result<(), reqwest::Error> {
         .danger_accept_invalid_certs(true)
         .build()
         .unwrap();
-    let mut kvdb_client = KvdbClient::new();
 
     // test, for each database
     for n in 1..3 {
         let db_id = format!("db{}", n);
 
+        let mut kvdb_client = KvdbClient::new(db_id.clone());
+
         op_batch(&client, db_id.clone()).await;
         op_del(&client, db_id.clone()).await;
-        op_get(&mut kvdb_client, db_id.clone()).await;
+        op_get(&mut kvdb_client).await;
         op_obj(&client, db_id.clone()).await;
         op_put(&client, db_id.clone()).await;
         op_clear(&client, db_id.clone()).await;
