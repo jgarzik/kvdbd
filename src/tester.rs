@@ -82,15 +82,14 @@ impl KvdbClient {
         }
     }
 
-    pub async fn put1(&mut self, key: String, value: String) -> bool {
+    pub async fn mutate(&mut self, mut_req: &MutationRequest) -> bool {
         let basepath = format!("{}{}/{}/", T_ENDPOINT, T_BASEURI, self.db_id);
         let mutate_url = format!("{}mutate", basepath);
 
-        // encode put request
-        let out_req = pbenc_mutate_ins1(key.as_bytes(), value.as_bytes());
-        let out_bytes = out_req.write_to_bytes().unwrap();
+        // encode mutation request
+        let out_bytes = mut_req.write_to_bytes().unwrap();
 
-        // exec put request
+        // exec mutation request
         let resp_res = self.client.post(&mutate_url).body(out_bytes).send().await;
         match resp_res {
             Ok(resp) => {
@@ -105,6 +104,13 @@ impl KvdbClient {
             }
             Err(_e) => false,
         }
+    }
+
+    pub async fn put1(&mut self, key: String, value: String) -> bool {
+        // encode put request
+        let out_req = pbenc_mutate_ins1(key.as_bytes(), value.as_bytes());
+
+        self.mutate(&out_req).await
     }
 
     pub async fn del1(&mut self, key: String) -> bool {
@@ -128,6 +134,30 @@ impl KvdbClient {
                 }
             }
             Err(_e) => false,
+        }
+    }
+
+    pub async fn stat(&mut self) -> Option<DbStatResponse> {
+        let basepath = format!("{}{}/{}/", T_ENDPOINT, T_BASEURI, self.db_id);
+        let stat_url = format!("{}stat", basepath);
+
+        // exec db-stat request
+        let resp_res = self.client.get(&stat_url).send().await;
+        if resp_res.is_err() {
+            return None;
+        }
+        let resp = resp_res.unwrap();
+        if resp.status() != StatusCode::OK {
+            return None;
+        }
+
+        // decode protobuf list-of-keys response
+        match resp.bytes().await {
+            Ok(bytes) => match DbStatResponse::parse_from_bytes(&bytes) {
+                Err(_e) => None,
+                Ok(req) => Some(req),
+            },
+            Err(_e) => return None,
         }
     }
 }
@@ -420,9 +450,7 @@ async fn t_del_gone(client: &Client, db_id: String, key: String) {
     }
 }
 
-async fn op_batch(client: &Client, db_id: String) {
-    let basepath = format!("{}{}/{}/", T_ENDPOINT, T_BASEURI, db_id);
-    let mutate_url = format!("{}mutate", basepath);
+async fn op_batch(kvdb_client: &mut KvdbClient, client: &Client, db_id: String) {
     let test_key = String::from("op_batch_key1");
     let test_value = format!("helloworld op_put {}", db_id);
 
@@ -443,21 +471,9 @@ async fn op_batch(client: &Client, db_id: String) {
     let req = pbenc_update_ins("op_batch_key3".as_bytes(), "op_batch_value3".as_bytes());
     out_msg.reqs.push(req);
 
-    let out_bytes: Vec<u8> = out_msg.write_to_bytes().unwrap();
-
     // exec batch request
-    let resp_res = client.post(&mutate_url).body(out_bytes).send().await;
-    match resp_res {
-        Ok(resp) => {
-            assert_eq!(resp.status(), StatusCode::OK);
-
-            match resp.text().await {
-                Ok(_body) => {}
-                Err(_e) => assert!(false),
-            }
-        }
-        Err(_e) => assert!(false),
-    }
+    let res = kvdb_client.mutate(&out_msg).await;
+    assert_eq!(res, true);
 
     t_get_gone(client, db_id.clone(), test_key.clone()).await;
     t_get_ok(
@@ -488,44 +504,19 @@ async fn op_del(client: &Client, db_id: String) {
     t_del_gone(client, db_id, test_key).await;
 }
 
-async fn op_stat(client: &Client, db_id: String) {
+async fn op_stat(kvdb_client: &mut KvdbClient) {
     let test_key = String::from("op_stat_key1");
-    let test_value = format!("helloworld op_stat {}", db_id);
+    let test_value = format!("hllworld op_stat {}", kvdb_client.db_id.clone());
 
-    t_put(client, db_id.clone(), test_key.clone(), test_value).await;
-
-    let basepath = format!("{}{}/{}/", T_ENDPOINT, T_BASEURI, db_id);
-    let stat_url = format!("{}stat", basepath);
+    let res = kvdb_client.put1(test_key.clone(), test_value.clone()).await;
+    assert_eq!(res, true);
 
     // exec db-stat request
-    let resp_res = client.get(&stat_url).send().await;
-    if resp_res.is_err() {
+    let resp_res = kvdb_client.stat().await;
+    if resp_res.is_none() {
         assert!(false);
     }
-    let resp = resp_res.unwrap();
-    assert_eq!(resp.status(), StatusCode::OK);
-
-    // decode protobuf list-of-keys response
-    let bytes_res = resp.bytes().await;
-    let bytes;
-    match bytes_res {
-        Ok(bytes_) => bytes = bytes_,
-        Err(_e) => {
-            assert!(false);
-            panic!("silence E0381 warning");
-        }
-    }
-
-    let in_msg;
-    match DbStatResponse::parse_from_bytes(&bytes) {
-        Err(_e) => {
-            assert!(false);
-            panic!("silence E0381 warning");
-        }
-        Ok(req) => {
-            in_msg = req;
-        }
-    }
+    let in_msg = resp_res.unwrap();
 
     assert_eq!(in_msg.n_records, 1);
 }
@@ -744,13 +735,13 @@ async fn main() -> Result<(), reqwest::Error> {
 
         let mut kvdb_client = KvdbClient::new(db_id.clone());
 
-        op_batch(&client, db_id.clone()).await;
+        op_batch(&mut kvdb_client, &client, db_id.clone()).await;
         op_del(&client, db_id.clone()).await;
         op_get(&mut kvdb_client).await;
         op_obj(&client, db_id.clone()).await;
         op_put(&client, db_id.clone()).await;
         op_clear(&client, db_id.clone()).await;
-        op_stat(&client, db_id.clone()).await;
+        op_stat(&mut kvdb_client).await;
         op_iter(&client, db_id.clone()).await;
     }
     println!("Integration testing successful.");
