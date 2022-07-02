@@ -28,9 +28,8 @@ Supported base protocol features:
 * HTTP 2.0
 * REST
 
-Two encoding methods are supported:
-* JSON, with some limitations on binary keys
-* Protocol buffers
+[Protocol Buffers](https://developers.google.com/protocol-buffers)
+define the network protocol and wire encoding.
 
 ## REST/JSON API
 
