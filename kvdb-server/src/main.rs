@@ -2,8 +2,6 @@
 extern crate actix_web;
 extern crate clap;
 extern crate openssl;
-mod codec;
-use kvdbd::db;
 
 const APPNAME: &'static str = "kvdbd";
 const VERSION: &'static str = env!("CARGO_PKG_VERSION");
@@ -23,9 +21,8 @@ use serde_json::json;
 
 use protobuf::{EnumOrUnknown, Message};
 
-include!(concat!(env!("OUT_DIR"), "/protos/mod.rs"));
-
-use pbapi::{get_op_result, get_response, update_request, GetOpResult, GetResponse};
+use kvdb_lib::{db, codec};
+use kvdb_lib::pbapi::{get_op_result, get_response, update_request, GetOpResult, GetResponse};
 
 // struct used for both input (server config file) and output (server info)
 #[derive(Serialize, Deserialize, Clone)]

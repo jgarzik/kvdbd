@@ -7,6 +7,7 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+kvdb-lib = { path = "../kvdb-lib" }
 serde = "^1.0"
 serde_json = "^1.0"
 serde_derive = "^1.0"
@@ -14,16 +15,10 @@ actix-web = { version = "4", features = ["openssl"] }
 env_logger = "^0.5"
 bytes = "0.4"
 clap = "^3.2"
-reqwest = "^0.11"
 tokio = { version = "1", features = ["full"] }
-protobuf = "3"
-sled = "^0.34"
-lmdb = "^0.8"
 openssl = "^0.10"
-
-[build-dependencies]
-protobuf-codegen = "3"
-protoc-rust = "^2.0"
+protobuf = "3"
+reqwest = "^0.11"
 
 [dev-dependencies]
 tempdir = "^0.3"

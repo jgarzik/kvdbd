@@ -1,4 +1,3 @@
-use kvdbd::db;
 
 use crate::pbapi::{
     db_stat_response, get_request, iter_request, iter_response, key_request, mutation_request,
@@ -49,7 +48,7 @@ pub fn pbenc_db_stat_resp(n_records: u64) -> Vec<u8> {
     return out_msg.write_to_bytes().unwrap();
 }
 
-pub fn pbenc_iter_resp(key_list: &db::api::KeyList) -> Vec<u8> {
+pub fn pbenc_iter_resp(key_list: &crate::db::api::KeyList) -> Vec<u8> {
     let mut out_msg = IterResponse::new();
     out_msg.magic = EnumOrUnknown::new(iter_response::MagicNum::MAGIC);
 

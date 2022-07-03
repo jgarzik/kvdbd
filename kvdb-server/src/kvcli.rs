@@ -8,7 +8,7 @@ use std::io::{BufRead, BufReader, Write};
 use std::{env, io, process};
 
 use protobuf::Message;
-include!(concat!(env!("OUT_DIR"), "/protos/mod.rs"));
+use kvdb_lib::{pbapi};
 use pbapi::{GetOp, GetRequest, KeyRequest, MutationRequest, UpdateRequest};
 
 fn stdout_bytes(b: &[u8]) -> io::Result<()> {

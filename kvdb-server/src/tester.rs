@@ -8,8 +8,8 @@
 
 extern crate clap;
 extern crate reqwest;
-mod client;
-mod codec;
+
+use kvdb_lib::{client, codec, pbapi};
 
 const T_ENDPOINT: &'static str = "https://127.0.0.1:8080";
 const T_BASEURI: &'static str = "/api";
@@ -20,7 +20,6 @@ const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 use reqwest::{Client, StatusCode};
 
 use protobuf::{EnumOrUnknown, Message};
-include!(concat!(env!("OUT_DIR"), "/protos/mod.rs"));
 
 use client::KvdbClient;
 use pbapi::{

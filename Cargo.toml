@@ -1,6 +1,7 @@
 [workspace]
 
 members = [
+  "kvdb-lib",
   "kvdb-server",
 ]
 
