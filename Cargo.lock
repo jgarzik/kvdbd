@@ -844,6 +844,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "kvdb-lib"
+version = "0.1.0"
+dependencies = [
+ "lmdb",
+ "protobuf 3.1.0",
+ "protobuf-codegen 3.1.0",
+ "protoc-rust",
+ "reqwest",
+ "sled",
+ "tempdir",
+]
+
+[[package]]
+name = "kvdb-tools"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "env_logger",
+ "kvdb-lib",
+ "protobuf 3.1.0",
+ "reqwest",
+ "tokio",
+]
+
+[[package]]
 name = "kvdbd"
 version = "0.9.1"
 dependencies = [
@@ -851,18 +876,12 @@ dependencies = [
  "bytes 0.4.12",
  "clap",
  "env_logger",
- "lmdb",
+ "kvdb-lib",
  "openssl",
  "protobuf 3.1.0",
- "protobuf-codegen 3.1.0",
- "protoc-rust",
- "reqwest",
  "serde",
  "serde_derive",
  "serde_json",
- "sled",
- "tempdir",
- "tokio",
 ]
 
 [[package]]

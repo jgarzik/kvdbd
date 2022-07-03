@@ -1,15 +1,15 @@
 extern crate clap;
 
-const APPNAME: &'static str = "kvdb-pb";
+const APPNAME: &'static str = "kvcli";
 const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
 use std::fs::File;
 use std::io::{BufRead, BufReader, Write};
 use std::{env, io, process};
 
-use protobuf::Message;
-include!(concat!(env!("OUT_DIR"), "/protos/mod.rs"));
+use kvdb_lib::pbapi;
 use pbapi::{GetOp, GetRequest, KeyRequest, MutationRequest, UpdateRequest};
+use protobuf::Message;
 
 fn stdout_bytes(b: &[u8]) -> io::Result<()> {
     use std::os::unix::io::FromRawFd;
@@ -129,32 +129,27 @@ fn encode_batch(batch_path: String) -> io::Result<()> {
 }
 
 fn main() -> io::Result<()> {
-    env::set_var("RUST_LOG", "actix_web=debug");
     env_logger::init();
 
     // parse command line
     let op_vals = ["get", "mget", "del", "put", "mutate"];
     let cli_matches = clap::App::new(APPNAME)
         .version(VERSION)
-        .about("Wire protocol encode/decode for kvdbd")
-        .arg(
-            clap::Arg::from_usage("<op> 'The operation to decode/encode'")
-                .possible_values(&op_vals)
-                .required(true),
-        )
-        .arg(
-            clap::Arg::with_name("decode")
-                .short('d')
-                .long("decode")
-                .help("Decode protobuf input and print")
-                .takes_value(false),
-        )
+        .about("Command line client for kvdbd")
         .arg(
             clap::Arg::with_name("encode")
-                .short('e')
                 .long("encode")
+                .value_name("OP")
                 .help("Encode CLI args to protobuf output")
-                .takes_value(false),
+                .possible_values(&op_vals)
+                .takes_value(true),
+        )
+        .arg(
+            clap::Arg::with_name("dbid")
+                .long("dbid")
+                .value_name("DB-ID")
+                .help("Database identifier for connection")
+                .takes_value(true),
         )
         .arg(
             clap::Arg::with_name("key")
@@ -179,11 +174,12 @@ fn main() -> io::Result<()> {
         )
         .get_matches();
 
-    if cli_matches.is_present("decode") {
+    if false {
+        // cli_matches.is_present("decode") {
         println!("Decode not implemented yet."); // TODO
         process::exit(1);
     } else if cli_matches.is_present("encode") {
-        let op = cli_matches.value_of("op").unwrap();
+        let op = cli_matches.value_of("encode").unwrap();
         match op {
             "get" | "del" => {
                 if !cli_matches.is_present("key") {
@@ -227,7 +223,7 @@ fn main() -> io::Result<()> {
             }
         }
     } else {
-        println!("Either --decode or --encode must be supplied.");
+        println!("No operation or action specified.  Aborting.");
         process::exit(1);
     }
 }

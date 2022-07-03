@@ -2,7 +2,6 @@
 extern crate actix_web;
 extern crate clap;
 extern crate openssl;
-mod db;
 
 const APPNAME: &'static str = "kvdbd";
 const VERSION: &'static str = env!("CARGO_PKG_VERSION");
@@ -22,13 +21,8 @@ use serde_json::json;
 
 use protobuf::{EnumOrUnknown, Message};
 
-include!(concat!(env!("OUT_DIR"), "/protos/mod.rs"));
-
-use pbapi::{
-    db_stat_response, get_op_result, get_request, get_response, iter_request, iter_response,
-    key_request, mutation_request, update_request, DbStatResponse, GetOpResult, GetRequest,
-    GetResponse, IterRequest, IterResponse, KeyRequest, MutationRequest, UpdateRequest,
-};
+use kvdb_lib::pbapi::{get_op_result, get_response, update_request, GetOpResult, GetResponse};
+use kvdb_lib::{codec, db};
 
 // struct used for both input (server config file) and output (server info)
 #[derive(Serialize, Deserialize, Clone)]
@@ -166,91 +160,6 @@ fn err_500() -> HttpResponse {
         )
 }
 
-fn pbenc_db_stat_resp(n_records: u64) -> Vec<u8> {
-    let mut out_msg = DbStatResponse::new();
-    out_msg.magic = EnumOrUnknown::new(db_stat_response::MagicNum::MAGIC);
-    out_msg.n_records = n_records;
-
-    return out_msg.write_to_bytes().unwrap();
-}
-
-fn pbenc_iter_resp(key_list: &db::api::KeyList) -> Vec<u8> {
-    let mut out_msg = IterResponse::new();
-    out_msg.magic = EnumOrUnknown::new(iter_response::MagicNum::MAGIC);
-
-    for key in &key_list.keys {
-        out_msg.keys.push(key.clone());
-    }
-    out_msg.list_end = key_list.list_end;
-
-    return out_msg.write_to_bytes().unwrap();
-}
-
-fn pbdec_iter_req(wiredata: &[u8]) -> Option<IterRequest> {
-    match IterRequest::parse_from_bytes(wiredata) {
-        Err(_e) => None,
-        Ok(req) => {
-            if req.magic != EnumOrUnknown::new(iter_request::MagicNum::MAGIC) {
-                None
-            } else {
-                Some(req)
-            }
-        }
-    }
-}
-
-fn pbdec_key_req(wiredata: &[u8]) -> Option<KeyRequest> {
-    match KeyRequest::parse_from_bytes(wiredata) {
-        Err(_e) => None,
-        Ok(req) => {
-            if req.magic != EnumOrUnknown::new(key_request::MagicNum::MAGIC) {
-                None
-            } else {
-                Some(req)
-            }
-        }
-    }
-}
-
-fn pbdec_update_req(wiredata: &[u8]) -> Option<UpdateRequest> {
-    match UpdateRequest::parse_from_bytes(wiredata) {
-        Err(_e) => None,
-        Ok(req) => {
-            if req.magic != EnumOrUnknown::new(update_request::MagicNum::MAGIC) {
-                None
-            } else {
-                Some(req)
-            }
-        }
-    }
-}
-
-fn pbdec_mget_req(wiredata: &[u8]) -> Option<GetRequest> {
-    match GetRequest::parse_from_bytes(wiredata) {
-        Err(_e) => None,
-        Ok(req) => {
-            if req.magic != EnumOrUnknown::new(get_request::MagicNum::MAGIC) {
-                None
-            } else {
-                Some(req)
-            }
-        }
-    }
-}
-
-fn pbdec_mutate_req(wiredata: &[u8]) -> Option<MutationRequest> {
-    match MutationRequest::parse_from_bytes(wiredata) {
-        Err(_e) => None,
-        Ok(req) => {
-            if req.magic != EnumOrUnknown::new(mutation_request::MagicNum::MAGIC) {
-                None
-            } else {
-                Some(req)
-            }
-        }
-    }
-}
-
 // helper function, success + binary response
 fn ok_binary(val: Vec<u8>) -> HttpResponse {
     HttpResponse::Ok()
@@ -335,7 +244,7 @@ async fn req_stat(
     let st = res.unwrap();
 
     // encode protobuf output to bytes
-    let out_bytes = pbenc_db_stat_resp(st.n_records);
+    let out_bytes = codec::pbenc_db_stat_resp(st.n_records);
 
     ok_binary(out_bytes)
 }
@@ -380,7 +289,7 @@ async fn req_iter(
     (path, body): (web::Path<(String,)>, web::Bytes),
 ) -> HttpResponse {
     // decode protobuf msg containing key, into KeyRequest struct
-    let res = pbdec_iter_req(&body);
+    let res = codec::pbdec_iter_req(&body);
     if res.is_none() {
         return err_bad_req();
     }
@@ -411,7 +320,7 @@ async fn req_iter(
 
     // encode protobuf output to bytes
     let key_list = res.unwrap();
-    let out_bytes = pbenc_iter_resp(&key_list);
+    let out_bytes = codec::pbenc_iter_resp(&key_list);
 
     ok_binary(out_bytes)
 }
@@ -422,7 +331,7 @@ async fn req_del(
     (path, body): (web::Path<(String,)>, web::Bytes),
 ) -> HttpResponse {
     // decode protobuf msg containing key, into KeyRequest struct
-    let res = pbdec_key_req(&body);
+    let res = codec::pbdec_key_req(&body);
     if res.is_none() {
         return err_bad_req();
     }
@@ -454,7 +363,7 @@ async fn req_mget(
     (path, body): (web::Path<(String,)>, web::Bytes),
 ) -> HttpResponse {
     // decode protobuf msg containing key, into KeyRequest struct
-    let res = pbdec_mget_req(&body);
+    let res = codec::pbdec_mget_req(&body);
     if res.is_none() {
         return err_bad_req();
     }
@@ -507,7 +416,7 @@ async fn req_mutate(
     (path, body): (web::Path<(String,)>, web::Bytes),
 ) -> HttpResponse {
     // decode protobuf msg containing key/value pairs
-    let res = pbdec_mutate_req(&body);
+    let res = codec::pbdec_mutate_req(&body);
     if res.is_none() {
         return err_bad_req();
     }
@@ -550,7 +459,7 @@ async fn req_put(
     (path, body): (web::Path<(String,)>, web::Bytes),
 ) -> HttpResponse {
     // decode protobuf msg containing key, into KeyRequest struct
-    let res = pbdec_update_req(&body);
+    let res = codec::pbdec_update_req(&body);
     if res.is_none() {
         return err_bad_req();
     }
