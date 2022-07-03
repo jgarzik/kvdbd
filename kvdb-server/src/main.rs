@@ -1,7 +1,8 @@
 #[macro_use(get)]
 extern crate actix_web;
 extern crate clap;
-extern crate openssl;
+extern crate rustls;
+extern crate rustls_pemfile;
 
 const APPNAME: &'static str = "kvdbd";
 const VERSION: &'static str = env!("CARGO_PKG_VERSION");
@@ -12,10 +13,11 @@ const DEF_BIND_PORT: &'static str = "8080";
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::{env, fs, process};
+use std::fs::File;
+use std::io::BufReader;
 
 use actix_web::http::StatusCode;
 use actix_web::{middleware, web, App, HttpResponse, HttpServer};
-use openssl::ssl::{SslAcceptor, SslFiletype, SslMethod};
 use serde_derive::{Deserialize, Serialize};
 use serde_json::json;
 
@@ -92,6 +94,17 @@ struct Backend {
 
 struct BackendState {
     backends: HashMap<String, Backend>,
+}
+
+fn load_tls_key(filename: &str) -> rustls::PrivateKey {
+    let keyfile = fs::File::open(filename).expect("cannot open private key file");
+    let mut reader = BufReader::new(keyfile);
+    let res = rustls_pemfile::pkcs8_private_keys(&mut reader);
+    println!("RES: {:?}", res);
+    let keys = res.unwrap();
+    println!("KEYS: {:?}", keys);
+    assert!(keys.len() > 0);
+    rustls::PrivateKey(keys[0].clone())
 }
 
 fn build_backend(id: &str) -> Backend {
@@ -633,16 +646,29 @@ async fn main() -> std::io::Result<()> {
 
     // if TLS key/cert present in config, run in TLS mode
     if !server_cfg.ssl.private_key_path.is_empty() && !server_cfg.ssl.cert_chain_path.is_empty() {
-        let mut builder = SslAcceptor::mozilla_intermediate(SslMethod::tls()).unwrap();
-        builder
-            .set_private_key_file(server_cfg.ssl.private_key_path, SslFiletype::PEM)
-            .unwrap();
-        builder
-            .set_certificate_chain_file(server_cfg.ssl.cert_chain_path)
-            .unwrap();
+        // Load key files
+        let cert_file = &mut BufReader::new(
+            File::open(server_cfg.ssl.cert_chain_path).unwrap());
+
+        // Parse the certificate and set it in the configuration
+	let mut cert_chain: Vec<rustls::Certificate> = Vec::new();
+        let v8_cert_chain = rustls_pemfile::certs(cert_file).unwrap();
+	for v8 in &v8_cert_chain {
+	    cert_chain.push(rustls::Certificate(v8.to_vec()));
+	}
+
+	let priv_key = load_tls_key(&server_cfg.ssl.private_key_path);
+
+        // Create TLS configuration
+        let tls_config = rustls::ServerConfig::builder()
+            .with_safe_defaults()
+            .with_no_client_auth()
+            .with_single_cert(cert_chain, priv_key)
+	    .unwrap();
+
         println!("Starting https server: {}", bind_pair);
         HttpServer::new(app)
-            .bind_openssl(bind_pair.to_string(), builder)?
+            .bind_rustls(bind_pair.to_string(), tls_config)?
             .run()
             .await
 
