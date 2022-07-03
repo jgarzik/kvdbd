@@ -1,8 +1,8 @@
 {
 	"debug": false,
 	"ssl": {
-	    "private_key_path":"tls-key.pem",
-	    "cert_chain_path":"tls-cert.pem"
+	    "private_key_path":"ssl/server.key",
+	    "cert_chain_path":"ssl/server.crt"
 	},
 	"databases": [
 		{
