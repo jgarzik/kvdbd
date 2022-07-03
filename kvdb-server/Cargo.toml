@@ -15,23 +15,10 @@ actix-web = { version = "4", features = ["openssl"] }
 env_logger = "^0.5"
 bytes = "0.4"
 clap = "^3.2"
-tokio = { version = "1", features = ["full"] }
 openssl = "^0.10"
 protobuf = "3"
-reqwest = "^0.11"
-
-[dev-dependencies]
-tempdir = "^0.3"
 
 [[bin]]
 name = "kvdbd"
 path = "src/main.rs"
-
-[[bin]]
-name = "kvcli"
-path = "src/kvcli.rs"
-
-[[bin]]
-name = "tester"
-path = "src/tester.rs"
 

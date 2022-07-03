@@ -3,5 +3,6 @@
 members = [
   "kvdb-lib",
   "kvdb-server",
+  "kvdb-tools",
 ]
 

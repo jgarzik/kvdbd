@@ -7,9 +7,9 @@ use std::fs::File;
 use std::io::{BufRead, BufReader, Write};
 use std::{env, io, process};
 
-use protobuf::Message;
-use kvdb_lib::{pbapi};
+use kvdb_lib::pbapi;
 use pbapi::{GetOp, GetRequest, KeyRequest, MutationRequest, UpdateRequest};
+use protobuf::Message;
 
 fn stdout_bytes(b: &[u8]) -> io::Result<()> {
     use std::os::unix::io::FromRawFd;

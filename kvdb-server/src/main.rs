@@ -21,8 +21,8 @@ use serde_json::json;
 
 use protobuf::{EnumOrUnknown, Message};
 
-use kvdb_lib::{db, codec};
 use kvdb_lib::pbapi::{get_op_result, get_response, update_request, GetOpResult, GetResponse};
+use kvdb_lib::{codec, db};
 
 // struct used for both input (server config file) and output (server info)
 #[derive(Serialize, Deserialize, Clone)]
