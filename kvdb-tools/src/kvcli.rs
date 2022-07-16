@@ -3,11 +3,13 @@ extern crate clap;
 const APPNAME: &'static str = "kvcli";
 const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
-use std::fs::File;
-use std::io::{BufRead, BufReader, Write};
-use std::{env, io, process};
+const T_ENDPOINT: &'static str = "https://127.0.0.1:8080";
 
-use kvdb_lib::pbapi;
+use std::fs::File;
+use std::io::{BufRead, BufReader, Error, ErrorKind, Write};
+use std::{env, io};
+
+use kvdb_lib::{client, pbapi};
 use pbapi::{GetOp, GetRequest, KeyRequest, MutationRequest, UpdateRequest};
 use protobuf::Message;
 
@@ -128,7 +130,20 @@ fn encode_batch(batch_path: String) -> io::Result<()> {
     stdout_bytes(&out_bytes)
 }
 
-fn main() -> io::Result<()> {
+async fn cmd_get(endpoint: &str, db_id: &str, key: &str) -> io::Result<()> {
+    let mut kvdb_client = client::KvdbClient::new(endpoint.to_string(), db_id.to_string());
+    let res = kvdb_client.get1(key.to_string()).await;
+    match res {
+        None => Err(Error::new(
+            ErrorKind::Other,
+            "Error: Key not found in database.",
+        )),
+        Some(val) => stdout_bytes(&val),
+    }
+}
+
+#[tokio::main]
+async fn main() -> io::Result<()> {
     env_logger::init();
 
     // parse command line
@@ -137,11 +152,26 @@ fn main() -> io::Result<()> {
         .version(VERSION)
         .about("Command line client for kvdbd")
         .arg(
+            clap::Arg::with_name("get")
+                .long("get")
+                .help("Command: GET, based on --key")
+                .required(false)
+                .takes_value(false),
+        )
+        .arg(
             clap::Arg::with_name("encode")
                 .long("encode")
                 .value_name("OP")
-                .help("Encode CLI args to protobuf output")
+                .help("Command: ENCODE CLI args to protobuf output")
                 .possible_values(&op_vals)
+                .takes_value(true),
+        )
+        .arg(
+            clap::Arg::with_name("endpoint")
+                .long("endpoint")
+                .value_name("ENDPOINT-URI")
+                .help("HTTP or HTTPS endpoint for client connection to server")
+                .default_value(T_ENDPOINT)
                 .takes_value(true),
         )
         .arg(
@@ -174,56 +204,64 @@ fn main() -> io::Result<()> {
         )
         .get_matches();
 
-    if false {
-        // cli_matches.is_present("decode") {
-        println!("Decode not implemented yet."); // TODO
-        process::exit(1);
+    if cli_matches.is_present("decode") {
+        Err(Error::new(
+            ErrorKind::Other,
+            "TODO: Decode not implemented yet",
+        ))
     } else if cli_matches.is_present("encode") {
         let op = cli_matches.value_of("encode").unwrap();
         match op {
             "get" | "del" => {
                 if !cli_matches.is_present("key") {
-                    println!("Missing --key");
-                    process::exit(1);
+                    return Err(Error::new(ErrorKind::Other, "Missing --key"));
                 }
                 let key = cli_matches.value_of("key").unwrap();
-                return encode_get(key.to_string());
+                encode_get(key.to_string())
             }
             "mget" => {
                 if !cli_matches.is_present("metadata") {
-                    println!("Missing --metadata");
-                    process::exit(1);
+                    return Err(Error::new(ErrorKind::Other, "Missing --metadata"));
                 }
                 let batch_path = cli_matches.value_of("metadata").unwrap();
-                return encode_mget(batch_path.to_string());
+                encode_mget(batch_path.to_string())
             }
             "put" => {
                 if !cli_matches.is_present("key") {
-                    println!("Missing --key");
-                    process::exit(1);
+                    return Err(Error::new(ErrorKind::Other, "Missing --key"));
                 }
                 if !cli_matches.is_present("value") {
-                    println!("Missing --value");
-                    process::exit(1);
+                    return Err(Error::new(ErrorKind::Other, "Missing --value"));
                 }
                 let key = cli_matches.value_of("key").unwrap();
                 let val = cli_matches.value_of("value").unwrap();
-                return encode_put(key.to_string(), val.to_string());
+                encode_put(key.to_string(), val.to_string())
             }
             "mutate" => {
                 if !cli_matches.is_present("metadata") {
-                    println!("Missing --metadata");
-                    process::exit(1);
+                    return Err(Error::new(ErrorKind::Other, "Missing --metadata"));
                 }
                 let batch_path = cli_matches.value_of("metadata").unwrap();
-                return encode_batch(batch_path.to_string());
+                encode_batch(batch_path.to_string())
             }
             _ => {
                 panic!("Unhandled operation - should not happen");
             }
         }
+    } else if cli_matches.is_present("get") {
+        if !cli_matches.is_present("key") || !cli_matches.is_present("dbid") {
+            return Err(Error::new(ErrorKind::Other, "Missing --key or --dbid"));
+        }
+
+        let endpoint = cli_matches.value_of("endpoint").unwrap();
+        let dbid = cli_matches.value_of("dbid").unwrap();
+        let key = cli_matches.value_of("key").unwrap();
+
+        cmd_get(endpoint, dbid, key).await
     } else {
-        println!("No operation or action specified.  Aborting.");
-        process::exit(1);
+        Err(Error::new(
+            ErrorKind::Other,
+            "Error: No command operation specified.",
+        ))
     }
 }
