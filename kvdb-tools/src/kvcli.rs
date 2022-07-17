@@ -142,6 +142,18 @@ async fn cmd_get(endpoint: &str, db_id: &str, key: &str) -> io::Result<()> {
     }
 }
 
+async fn cmd_put(endpoint: &str, db_id: &str, key: &str, value: &str) -> io::Result<()> {
+    let mut kvdb_client = client::KvdbClient::new(endpoint.to_string(), db_id.to_string());
+    let res = kvdb_client.put1(key.to_string(), value.to_string()).await;
+    match res {
+        false => Err(Error::new(
+            ErrorKind::Other,
+            "Error: Database store failed.",
+        )),
+        true => Ok(()),
+    }
+}
+
 #[tokio::main]
 async fn main() -> io::Result<()> {
     env_logger::init();
@@ -151,6 +163,13 @@ async fn main() -> io::Result<()> {
     let cli_matches = clap::App::new(APPNAME)
         .version(VERSION)
         .about("Command line client for kvdbd")
+        .arg(
+            clap::Arg::with_name("put")
+                .long("put")
+                .help("Command: PUT, based on --key and --value")
+                .required(false)
+                .takes_value(false),
+        )
         .arg(
             clap::Arg::with_name("get")
                 .long("get")
@@ -248,6 +267,23 @@ async fn main() -> io::Result<()> {
                 panic!("Unhandled operation - should not happen");
             }
         }
+    } else if cli_matches.is_present("put") {
+        if !cli_matches.is_present("key")
+            || !cli_matches.is_present("value")
+            || !cli_matches.is_present("dbid")
+        {
+            return Err(Error::new(
+                ErrorKind::Other,
+                "Missing --key, --value or --dbid",
+            ));
+        }
+
+        let endpoint = cli_matches.value_of("endpoint").unwrap();
+        let dbid = cli_matches.value_of("dbid").unwrap();
+        let key = cli_matches.value_of("key").unwrap();
+        let value = cli_matches.value_of("value").unwrap();
+
+        cmd_put(endpoint, dbid, key, value).await
     } else if cli_matches.is_present("get") {
         if !cli_matches.is_present("key") || !cli_matches.is_present("dbid") {
             return Err(Error::new(ErrorKind::Other, "Missing --key or --dbid"));
