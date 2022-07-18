@@ -130,6 +130,31 @@ fn encode_batch(batch_path: String) -> io::Result<()> {
     stdout_bytes(&out_bytes)
 }
 
+async fn cmd_serverinfo(endpoint: &str) -> io::Result<()> {
+    let mut kvdb_client = client::KvdbClient::new(endpoint.to_string(), "unused_dbid".to_string());
+    let res = kvdb_client.serverinfo().await;
+    match res {
+        None => Err(Error::new(ErrorKind::Other, "ServerInfo Failed")),
+        Some(resp) => {
+            let s = std::str::from_utf8(&resp).unwrap();
+            println!("{}", s);
+            Ok(())
+        }
+    }
+}
+
+async fn cmd_stat(endpoint: &str, db_id: &str) -> io::Result<()> {
+    let mut kvdb_client = client::KvdbClient::new(endpoint.to_string(), db_id.to_string());
+    let res = kvdb_client.stat().await;
+    match res {
+        None => Err(Error::new(ErrorKind::Other, "Database Stat Error")),
+        Some(resp) => {
+            println!("{:?}", resp);
+            Ok(())
+        }
+    }
+}
+
 async fn cmd_get(endpoint: &str, db_id: &str, key: &str) -> io::Result<()> {
     let mut kvdb_client = client::KvdbClient::new(endpoint.to_string(), db_id.to_string());
     let res = kvdb_client.get1(key.to_string()).await;
@@ -163,6 +188,20 @@ async fn main() -> io::Result<()> {
     let cli_matches = clap::App::new(APPNAME)
         .version(VERSION)
         .about("Command line client for kvdbd")
+        .arg(
+            clap::Arg::with_name("serverinfo")
+                .long("serverinfo")
+                .help("Command: SERVERINFO - Server-wide stats and info")
+                .required(false)
+                .takes_value(false),
+        )
+        .arg(
+            clap::Arg::with_name("stat")
+                .long("stat")
+                .help("Command: STAT - Database-wide stats")
+                .required(false)
+                .takes_value(false),
+        )
         .arg(
             clap::Arg::with_name("put")
                 .long("put")
@@ -294,6 +333,18 @@ async fn main() -> io::Result<()> {
         let key = cli_matches.value_of("key").unwrap();
 
         cmd_get(endpoint, dbid, key).await
+    } else if cli_matches.is_present("stat") {
+        if !cli_matches.is_present("dbid") {
+            return Err(Error::new(ErrorKind::Other, "Missing --dbid"));
+        }
+        let endpoint = cli_matches.value_of("endpoint").unwrap();
+        let dbid = cli_matches.value_of("dbid").unwrap();
+
+        cmd_stat(endpoint, dbid).await
+    } else if cli_matches.is_present("serverinfo") {
+        let endpoint = cli_matches.value_of("endpoint").unwrap();
+
+        cmd_serverinfo(endpoint).await
     } else {
         Err(Error::new(
             ErrorKind::Other,
