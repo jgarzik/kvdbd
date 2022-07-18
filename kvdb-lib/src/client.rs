@@ -141,7 +141,28 @@ impl KvdbClient {
                 Err(_e) => None,
                 Ok(req) => Some(req),
             },
-            Err(_e) => return None,
+            Err(_e) => None,
+        }
+    }
+
+    pub async fn serverinfo(&mut self) -> Option<Vec<u8>> {
+        let serverinfo_url = format!("{}/", self.endpoint);
+
+        // exec db-stat request
+        let resp_res = self.client.get(&serverinfo_url).send().await;
+        match resp_res {
+            Err(_e) => None,
+            Ok(resp) => {
+                if resp.status() == StatusCode::OK {
+                    // receive JSON response
+                    match resp.bytes().await {
+                        Ok(json_bytes) => Some(json_bytes.to_vec()),
+                        Err(_e) => None,
+                    }
+                } else {
+                    None
+                }
+            }
         }
     }
 }
