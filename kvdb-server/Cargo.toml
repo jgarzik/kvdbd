@@ -18,7 +18,3 @@ clap = "^3.2"
 openssl = "^0.10"
 protobuf = "3"
 
-[[bin]]
-name = "kvdbd"
-path = "src/main.rs"
-
