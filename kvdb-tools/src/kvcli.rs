@@ -167,6 +167,18 @@ async fn cmd_get(endpoint: &str, db_id: &str, key: &str) -> io::Result<()> {
     }
 }
 
+async fn cmd_del(endpoint: &str, db_id: &str, key: &str) -> io::Result<()> {
+    let mut kvdb_client = client::KvdbClient::new(endpoint.to_string(), db_id.to_string());
+    let res = kvdb_client.del1(key.to_string()).await;
+    match res {
+        false => Err(Error::new(
+            ErrorKind::Other,
+            "Error: Database delete failed.",
+        )),
+        true => Ok(()),
+    }
+}
+
 async fn cmd_put(endpoint: &str, db_id: &str, key: &str, value: &str) -> io::Result<()> {
     let mut kvdb_client = client::KvdbClient::new(endpoint.to_string(), db_id.to_string());
     let res = kvdb_client.put1(key.to_string(), value.to_string()).await;
@@ -206,6 +218,13 @@ async fn main() -> io::Result<()> {
             clap::Arg::with_name("put")
                 .long("put")
                 .help("Command: PUT, based on --key and --value")
+                .required(false)
+                .takes_value(false),
+        )
+        .arg(
+            clap::Arg::with_name("del")
+                .long("del")
+                .help("Command: DEL, based on --key")
                 .required(false)
                 .takes_value(false),
         )
@@ -333,6 +352,16 @@ async fn main() -> io::Result<()> {
         let key = cli_matches.value_of("key").unwrap();
 
         cmd_get(endpoint, dbid, key).await
+    } else if cli_matches.is_present("del") {
+        if !cli_matches.is_present("key") || !cli_matches.is_present("dbid") {
+            return Err(Error::new(ErrorKind::Other, "Missing --key or --dbid"));
+        }
+
+        let endpoint = cli_matches.value_of("endpoint").unwrap();
+        let dbid = cli_matches.value_of("dbid").unwrap();
+        let key = cli_matches.value_of("key").unwrap();
+
+        cmd_del(endpoint, dbid, key).await
     } else if cli_matches.is_present("stat") {
         if !cli_matches.is_present("dbid") {
             return Err(Error::new(ErrorKind::Other, "Missing --dbid"));
