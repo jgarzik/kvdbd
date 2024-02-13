@@ -1,8 +1,10 @@
 [package]
 name = "kvdbd"
 version = "0.9.3"
-authors = ["jgarzik"]
-edition = "2018"
+edition = "2021"
+authors = ["Jeff Garzik"]
+license = "MIT"
+description = "API Server for kvdbd protocol"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
