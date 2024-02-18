@@ -11,10 +11,10 @@ description = "Client tools for kvdbd protocol"
 [dependencies]
 kvdb-lib = { path = "../kvdb-lib" }
 protobuf = "3"
-reqwest = "^0.11"
+reqwest = "0.11"
 tokio = { version = "1", features = ["full"] }
 clap = "^3.2"
-env_logger = "^0.5"
+env_logger = "0.11"
 
 [[bin]]
 name = "kvcli"

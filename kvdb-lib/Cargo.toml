@@ -10,14 +10,14 @@ description = "Core library for kvdbd protocol"
 
 [dependencies]
 protobuf = "3"
-reqwest = "^0.11"
-sled = "^0.34"
-lmdb = "^0.8"
+reqwest = "0.11"
+sled = "0.34"
+lmdb = "0.8"
 
 [dev-dependencies]
-tempdir = "^0.3"
+tempdir = "0.3"
 
 [build-dependencies]
 protobuf-codegen = "3"
-protoc-rust = "^2.0"
+protoc-rust = "2"
 
