@@ -1003,9 +1003,11 @@ dependencies = [
  "kvdb-lib",
  "openssl",
  "protobuf 3.3.0",
+ "reqwest",
  "serde",
  "serde_derive",
  "serde_json",
+ "tokio",
 ]
 
 [[package]]

@@ -1,7 +1,7 @@
 /target
 **/*.rs.bk
 
-cfg-kvdbd.json
+kvdb-server/cfg-kvdbd.json
 db*.kv/
 tls-*.pem
 
