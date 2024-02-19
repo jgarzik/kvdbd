@@ -44,9 +44,9 @@ $ curl http://127.0.0.1:8080/ | json_pp
 
 ## Testing
 
-Integration testing is performed via a separate binary, `tester`.
+Integration testing is performed via the normal Rust method:
 ```
-$ cargo run --bin tester
+$ cargo test
 ```
 
 ## Other projects
